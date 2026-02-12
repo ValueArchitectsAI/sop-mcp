@@ -25,23 +25,20 @@ class TestStorageConfiguration:
         assert backend.base_dir == custom_dir
         assert backend.is_ephemeral is False
 
-    def test_no_env_vars_defaults_to_platformdirs(self, monkeypatch) -> None:
-        """Requirement 5.2: no env vars defaults to platformdirs user data dir."""
+    def test_no_env_vars_defaults_to_bundled_dir_ephemeral(self, monkeypatch) -> None:
+        """No env vars defaults to bundled src/sops/ directory, marked ephemeral."""
         monkeypatch.delenv("SOP_STORAGE_DIR", raising=False)
         monkeypatch.delenv("SOP_STORAGE_BACKEND", raising=False)
 
         backend = get_storage_backend()
 
-        import platformdirs
+        assert backend.base_dir == BUNDLED_SOPS_DIR
+        assert backend.is_ephemeral is True
 
-        expected = Path(platformdirs.user_data_dir("sop-mcp"))
-        assert backend.base_dir == expected
-        assert backend.is_ephemeral is False
-
-    def test_bundled_backend_uses_bundled_dir_and_is_ephemeral(
+    def test_bundled_backend_env_still_defaults_ephemeral(
         self, monkeypatch
     ) -> None:
-        """Requirement 5.3: SOP_STORAGE_BACKEND=bundled uses bundled dir, ephemeral."""
+        """SOP_STORAGE_BACKEND=bundled still results in ephemeral bundled dir."""
         monkeypatch.setenv("SOP_STORAGE_BACKEND", "bundled")
         monkeypatch.delenv("SOP_STORAGE_DIR", raising=False)
 

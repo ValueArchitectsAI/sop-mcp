@@ -215,33 +215,25 @@ def _validate_storage_path(path_str: str) -> Path:
 def get_storage_backend() -> LocalFilesystemBackend:
     """Create and return the appropriate storage backend based on configuration.
 
-    Resolution order (Requirements 5.1 – 5.4):
+    Resolution order:
 
-    1. ``SOP_STORAGE_BACKEND=bundled``  →  use the package's bundled directory
-       directly, marked as ephemeral.
-    2. ``SOP_STORAGE_DIR`` is set  →  use that path, seed from bundled.
-    3. Neither is set  →  use ``platformdirs.user_data_dir("sop-mcp")``,
-       seed from bundled.
+    1. ``SOP_STORAGE_DIR`` is set  →  use that path, seed from bundled,
+       not ephemeral.
+    2. Otherwise  →  use the bundled ``src/sops/`` directory directly,
+       marked as ephemeral (data may be lost on package cache refresh).
     """
-    backend_type = os.environ.get("SOP_STORAGE_BACKEND", "").strip().lower()
-
-    if backend_type == "bundled":
-        return LocalFilesystemBackend(
-            base_dir=BUNDLED_SOPS_DIR,
-            is_ephemeral=True,
-        )
-
     storage_dir_env = os.environ.get("SOP_STORAGE_DIR", "").strip()
 
     if storage_dir_env:
         base_dir = _validate_storage_path(storage_dir_env)
-    else:
-        import platformdirs  # deferred so the dep is only needed at runtime
+        return LocalFilesystemBackend(
+            base_dir=base_dir,
+            is_ephemeral=False,
+            seed_dir=BUNDLED_SOPS_DIR,
+        )
 
-        base_dir = Path(platformdirs.user_data_dir("sop-mcp"))
-
+    # Default: bundled directory, always ephemeral until a persistent path is configured
     return LocalFilesystemBackend(
-        base_dir=base_dir,
-        is_ephemeral=False,
-        seed_dir=BUNDLED_SOPS_DIR,
+        base_dir=BUNDLED_SOPS_DIR,
+        is_ephemeral=True,
     )
