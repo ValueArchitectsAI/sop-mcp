@@ -1,0 +1,31 @@
+[project]
+name = "sop-mcp"
+version = "0.1.0"
+description = "An MCP server for guiding users through Standard Operating Procedures"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp>=1.0.0",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=1.0.0",
+]
+
+[project.scripts]
+sop-mcp = "src.server:run"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v"
+asyncio_mode = "auto"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]

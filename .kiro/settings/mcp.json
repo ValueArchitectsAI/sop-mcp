@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+  
+   
+    "sop-mcp": {
+      "command": "/opt/homebrew/bin/uv",
+      "args": [
+        "run",
+        "sop-mcp"
+      ],
+      "cwd": "/Volumes/workplace/gh/sop-mcp",
+      "autoApprove": [
+        "publish_sop"
+      ]
+    }
+  }
+}
