@@ -73,7 +73,7 @@ class TestToolDiscovery:
         names = [t.name for t in result.tools]
         run_tools = [n for n in names if n.startswith("run_")]
         assert len(run_tools) > 0, "Expected at least one dynamic run_ tool"
-        assert "run_authoring_new_sop" in names
+        assert "run_sop_creation_guide" in names
 
 
 # ---------------------------------------------------------------------------
@@ -89,11 +89,11 @@ class TestExplainSop:
         assert "available_sops" in data
         assert data["total"] > 0
         names = [s["name"] for s in data["available_sops"]]
-        assert "authoring_new_sop" in names
+        assert "sop_creation_guide" in names
 
     async def test_explain_specific_sop(self, session):
-        data = await _call(session, "explain_sop", {"sop_name": "authoring_new_sop"})
-        assert data["sop_name"] == "authoring_new_sop"
+        data = await _call(session, "explain_sop", {"sop_name": "sop_creation_guide"})
+        assert data["sop_name"] == "sop_creation_guide"
         assert "title" in data
         assert "overview" in data
         assert data["total_steps"] > 0
@@ -116,10 +116,10 @@ class TestSubmitFeedback:
         data = await _call(
             session,
             "submit_sop_feedback",
-            {"sop_name": "authoring_new_sop", "feedback": "E2E test feedback — please ignore."},
+            {"sop_name": "sop_creation_guide", "feedback": "E2E test feedback — please ignore."},
         )
         assert data["success"] is True
-        assert data["sop_name"] == "authoring_new_sop"
+        assert data["sop_name"] == "sop_creation_guide"
         assert "timestamp" in data
 
     async def test_submit_feedback_unknown_sop(self, session):
@@ -142,7 +142,7 @@ class TestSopWorkflowRunThrough:
     async def test_full_walkthrough(self, session):
         """Start the authoring SOP, step through every step, and verify completion."""
         # Start (returns step 1)
-        data = await _call(session, "run_authoring_new_sop")
+        data = await _call(session, "run_sop_creation_guide")
         assert data["current_step"] == 1
         assert "step_content" in data
         total = data["total_steps"]
@@ -150,7 +150,7 @@ class TestSopWorkflowRunThrough:
 
         # Walk through remaining steps
         for step in range(1, total):
-            data = await _call(session, "run_authoring_new_sop", {"current_step": step})
+            data = await _call(session, "run_sop_creation_guide", {"current_step": step})
             assert data["current_step"] == step + 1
             assert "step_content" in data
 
@@ -164,26 +164,26 @@ class TestSopWorkflowRunThrough:
 
     async def test_walkthrough_with_explicit_version(self, session):
         """Run through the SOP while pinning a specific version."""
-        data = await _call(session, "run_authoring_new_sop", {"version": "1.0"})
+        data = await _call(session, "run_sop_creation_guide", {"version": "1.0"})
         assert data["sop_version"] == "1.0"
         assert data["current_step"] == 1
 
         total = data["total_steps"]
         # Jump straight to the last step
-        data = await _call(session, "run_authoring_new_sop", {"version": "1.0", "current_step": total})
+        data = await _call(session, "run_sop_creation_guide", {"version": "1.0", "current_step": total})
         assert data["is_complete"] is True
         assert data["sop_version"] == "1.0"
 
     async def test_invalid_step_returns_error(self, session):
-        data = await _call(session, "run_authoring_new_sop", {"current_step": 0})
+        data = await _call(session, "run_sop_creation_guide", {"current_step": 0})
         assert "error" in data
 
     async def test_step_beyond_total_returns_error(self, session):
-        start = await _call(session, "run_authoring_new_sop")
+        start = await _call(session, "run_sop_creation_guide")
         total = start["total_steps"]
-        data = await _call(session, "run_authoring_new_sop", {"current_step": total + 1})
+        data = await _call(session, "run_sop_creation_guide", {"current_step": total + 1})
         assert "error" in data
 
     async def test_invalid_version_returns_error(self, session):
-        data = await _call(session, "run_authoring_new_sop", {"version": "99.99"})
+        data = await _call(session, "run_sop_creation_guide", {"version": "99.99"})
         assert "error" in data

@@ -8,8 +8,8 @@ Storage layout:
         v{version}.md   — versioned snapshots (latest resolved by highest semver)
 
 Naming convention:
-    Folder name = Document ID = lowercase with underscores (e.g. "authoring_new_sop")
-    Tool name   = "run_{folder_name}" (e.g. "run_authoring_new_sop")
+    Folder name = Document ID = lowercase with underscores (e.g. "sop_creation_guide")
+    Tool name   = "run_{folder_name}" (e.g. "run_sop_creation_guide")
 """
 
 import re
@@ -69,7 +69,7 @@ class SOP:
 
         The SOP name is extracted from the content via the Document ID field.
         Expected format: lowercase words separated by underscores, at least 3 words
-        (e.g. "authoring_new_sop").
+        (e.g. "sop_creation_guide").
 
         Raises ValueError if the name cannot be found or the content is malformed.
         """
@@ -78,7 +78,7 @@ class SOP:
             raise ValueError(
                 "Could not extract SOP name from content. "
                 "Expected **Document ID**: with a lowercase underscore-separated name "
-                "(at least 3 words, e.g. authoring_new_sop)"
+                "(at least 3 words, e.g. sop_creation_guide)"
             )
 
         instance = object.__new__(cls)
@@ -217,7 +217,7 @@ def _extract_doc_id(content: str) -> str | None:
     """Extract the Document ID from SOP markdown content.
 
     Looks for a line like:
-        - **Document ID**: authoring_new_sop
+        - **Document ID**: sop_creation_guide
 
     Returns the ID string (lowercase, underscores) or None if not found.
     The ID must have at least 3 words (2+ underscores).
@@ -232,7 +232,7 @@ def _extract_doc_id(content: str) -> str | None:
 def _name_to_tool_name(sop_name: str) -> str:
     """Derive tool name from the SOP folder name.
 
-    Folder name is already lowercase with underscores (e.g. "authoring_new_sop").
+    Folder name is already lowercase with underscores (e.g. "sop_creation_guide").
     Returns as-is since it's already in the right format.
     """
     return sop_name
@@ -245,7 +245,7 @@ def list_available_sops() -> list[str]:
     """Return sorted list of available SOP folder names from the sops directory.
 
     Layout: src/sops/{name}/v{version}.md
-    Folder names are lowercase with underscores (e.g. "authoring_new_sop").
+    Folder names are lowercase with underscores (e.g. "sop_creation_guide").
     """
     if not SOPS_DIR.exists():
         return []
@@ -281,7 +281,7 @@ def resolve_sop(sop_name: str, version: str | None = None) -> SOP:
     The version parameter is optional. When omitted (None), latest is returned.
 
     Args:
-        sop_name: The SOP folder name (e.g. "authoring_new_sop").
+        sop_name: The SOP folder name (e.g. "sop_creation_guide").
         version: Optional semantic version string (e.g. "1.0"). Defaults to latest.
 
     Raises:

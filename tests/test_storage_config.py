@@ -11,10 +11,7 @@ from src.utils.storage_local import BUNDLED_SOPS_DIR, get_storage_backend
 
 
 class TestStorageConfiguration:
-
-    def test_sop_storage_dir_env_sets_backend_path(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_sop_storage_dir_env_sets_backend_path(self, tmp_path: Path, monkeypatch) -> None:
         """Requirement 5.1: SOP_STORAGE_DIR env var sets the backend path."""
         custom_dir = tmp_path / "custom_sops"
         monkeypatch.setenv("SOP_STORAGE_DIR", str(custom_dir))
@@ -35,9 +32,7 @@ class TestStorageConfiguration:
         assert backend.base_dir == BUNDLED_SOPS_DIR
         assert backend.is_ephemeral is True
 
-    def test_bundled_backend_env_still_defaults_ephemeral(
-        self, monkeypatch
-    ) -> None:
+    def test_bundled_backend_env_still_defaults_ephemeral(self, monkeypatch) -> None:
         """SOP_STORAGE_BACKEND=bundled still results in ephemeral bundled dir."""
         monkeypatch.setenv("SOP_STORAGE_BACKEND", "bundled")
         monkeypatch.delenv("SOP_STORAGE_DIR", raising=False)

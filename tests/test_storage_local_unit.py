@@ -48,7 +48,6 @@ class TestDirectoryCreation:
 
 
 class TestSopExists:
-
     def test_returns_true_for_existing_sop(self, tmp_path: Path) -> None:
         backend = LocalFilesystemBackend(base_dir=tmp_path)
         backend.write_sop("my_sop", "1.0.0", "# content")
@@ -74,7 +73,6 @@ class TestSopExists:
 
 
 class TestReadSopErrors:
-
     def test_raises_for_missing_sop(self, tmp_path: Path) -> None:
         backend = LocalFilesystemBackend(base_dir=tmp_path)
 
@@ -90,7 +88,6 @@ class TestReadSopErrors:
 
 
 class TestFeedbackOperations:
-
     def test_read_feedback_returns_none_when_absent(self, tmp_path: Path) -> None:
         backend = LocalFilesystemBackend(base_dir=tmp_path)
 

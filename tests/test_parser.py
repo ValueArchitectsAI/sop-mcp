@@ -16,11 +16,11 @@ class TestSopTitleExtraction:
     """Test that SOP extracts the correct title."""
 
     def test_extracts_title_from_sop(self):
-        sop = SOP("authoring_new_sop")
+        sop = SOP("sop_creation_guide")
         assert sop.title == "Standard Operating Procedure: Creating Standard Operating Procedures"
 
     def test_title_is_string(self):
-        sop = SOP("authoring_new_sop")
+        sop = SOP("sop_creation_guide")
         assert isinstance(sop.title, str)
         assert len(sop.title) > 0
 
@@ -29,12 +29,12 @@ class TestSopOverviewExtraction:
     """Test that SOP extracts the overview content."""
 
     def test_extracts_overview_from_sop(self):
-        sop = SOP("authoring_new_sop")
+        sop = SOP("sop_creation_guide")
         assert isinstance(sop.overview, str)
         assert len(sop.overview) > 0
 
     def test_overview_contains_expected_content(self):
-        sop = SOP("authoring_new_sop")
+        sop = SOP("sop_creation_guide")
         assert "Standard Operating Procedure" in sop.overview
         assert "RFC 2119" in sop.overview
 
@@ -43,28 +43,28 @@ class TestSopStepExtraction:
     """Test that SOP extracts all steps correctly."""
 
     def test_extracts_all_eight_steps(self):
-        sop = SOP("authoring_new_sop")
+        sop = SOP("sop_creation_guide")
         assert isinstance(sop.steps, list)
         assert len(sop.steps) == 8
 
     def test_steps_are_strings(self):
-        sop = SOP("authoring_new_sop")
+        sop = SOP("sop_creation_guide")
         for step in sop.steps:
             assert isinstance(step, str)
             assert len(step) > 0
 
     def test_steps_contain_step_headings(self):
-        sop = SOP("authoring_new_sop")
+        sop = SOP("sop_creation_guide")
         assert "Step 1:" in sop.steps[0]
         assert "Step 2:" in sop.steps[1]
         assert "Step 8:" in sop.steps[7]
 
     def test_first_step_is_prepare_for_sop_creation(self):
-        sop = SOP("authoring_new_sop")
+        sop = SOP("sop_creation_guide")
         assert "Prepare for SOP Creation" in sop.steps[0]
 
     def test_total_steps_property(self):
-        sop = SOP("authoring_new_sop")
+        sop = SOP("sop_creation_guide")
         assert sop.total_steps == 8
 
 
@@ -72,21 +72,21 @@ class TestSopProperties:
     """Test SOP convenience properties."""
 
     def test_path_is_set(self):
-        sop = SOP("authoring_new_sop")
+        sop = SOP("sop_creation_guide")
         assert sop.path is not None
         assert sop.path.exists()
 
     def test_truncated_overview_short(self):
-        sop = SOP("authoring_new_sop")
+        sop = SOP("sop_creation_guide")
         assert len(sop.truncated_overview) <= 150
 
     def test_name_is_set(self):
-        sop = SOP("authoring_new_sop")
-        assert sop.name == "authoring_new_sop"
+        sop = SOP("sop_creation_guide")
+        assert sop.name == "sop_creation_guide"
 
     def test_tool_name_derived_from_folder(self):
-        sop = SOP("authoring_new_sop")
-        assert sop.tool_name == "authoring_new_sop"
+        sop = SOP("sop_creation_guide")
+        assert sop.tool_name == "sop_creation_guide"
 
 
 class TestSopFromContent:
@@ -138,7 +138,7 @@ class TestListAvailableSops:
 
     def test_returns_sop_name(self):
         result = list_available_sops()
-        assert "authoring_new_sop" in result
+        assert "sop_creation_guide" in result
 
     def test_returns_names_without_md_extension(self):
         result = list_available_sops()

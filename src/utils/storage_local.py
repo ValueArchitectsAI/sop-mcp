@@ -71,8 +71,7 @@ class LocalFilesystemBackend:
             if not path.is_file():
                 available = self.list_versions(name)
                 raise FileNotFoundError(
-                    f"Version '{version}' not found for '{name}'. "
-                    f"Available versions: {', '.join(available)}"
+                    f"Version '{version}' not found for '{name}'. Available versions: {', '.join(available)}"
                 )
             return path.read_text(encoding="utf-8")
 

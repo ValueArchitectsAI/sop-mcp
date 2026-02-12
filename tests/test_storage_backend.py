@@ -59,9 +59,7 @@ def test_write_read_round_trip(tmp_path_factory, name: str, version: str, conten
     data=st.data(),
     num_sops=st.integers(min_value=1, max_value=5),
 )
-def test_listing_reflects_written_sops(
-    tmp_path_factory, data: st.DataObject, num_sops: int
-) -> None:
+def test_listing_reflects_written_sops(tmp_path_factory, data: st.DataObject, num_sops: int) -> None:
     """For any set of distinct SOP names and versions written to a fresh
     backend, list_sops() returns a sorted list containing exactly those
     names, and list_versions(name) returns exactly the versions written
@@ -70,16 +68,12 @@ def test_listing_reflects_written_sops(
     backend = LocalFilesystemBackend(base_dir=base_dir)
 
     # Generate distinct SOP names
-    names = data.draw(
-        st.lists(sop_names, min_size=num_sops, max_size=num_sops, unique=True)
-    )
+    names = data.draw(st.lists(sop_names, min_size=num_sops, max_size=num_sops, unique=True))
 
     expected_versions: dict[str, list[str]] = {}
     for name in names:
         # Each SOP gets 1-3 distinct versions
-        versions = data.draw(
-            st.lists(semver_versions, min_size=1, max_size=3, unique=True)
-        )
+        versions = data.draw(st.lists(semver_versions, min_size=1, max_size=3, unique=True))
         expected_versions[name] = versions
         for ver in versions:
             content = data.draw(sop_content)
@@ -107,9 +101,7 @@ def test_listing_reflects_written_sops(
         st.text(min_size=1, max_size=100).map(lambda s: s + "\x00"),
         st.text(min_size=1, max_size=100).map(lambda s: "\x00" + s),
         st.text(min_size=0, max_size=50).flatmap(
-            lambda prefix: st.text(min_size=0, max_size=50).map(
-                lambda suffix: prefix + "\x00" + suffix
-            )
+            lambda prefix: st.text(min_size=0, max_size=50).map(lambda suffix: prefix + "\x00" + suffix)
         ),
     )
 )
@@ -155,14 +147,11 @@ def _build_sop_content(doc_id: str, overview: str, step_body: str) -> str:
 
 
 # Strategy for SOP doc IDs: 3+ underscore-separated lowercase segments
-sop_doc_ids = (
-    st.lists(
-        st.text(alphabet=string.ascii_lowercase, min_size=2, max_size=6),
-        min_size=3,
-        max_size=5,
-    )
-    .map(lambda parts: "_".join(parts))
-)
+sop_doc_ids = st.lists(
+    st.text(alphabet=string.ascii_lowercase, min_size=2, max_size=6),
+    min_size=3,
+    max_size=5,
+).map(lambda parts: "_".join(parts))
 
 non_empty_text = st.text(
     alphabet=st.characters(categories=("L", "N", "Z")),

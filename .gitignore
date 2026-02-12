@@ -209,9 +209,9 @@ __marimo__/
 # Kiro MCP config (contains local paths)
 .kiro/settings/mcp.json
 
-# SOPs - ignore all except authoring_new_sop
+# SOPs - ignore all except sop_creation_guide
 src/sops/*
-!src/sops/authoring_new_sop/
+!src/sops/sop_creation_guide/
 
 # SOP feedback files (generated at runtime by E2E tests and users)
 **/feedback.md
