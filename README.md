@@ -8,7 +8,7 @@ An MCP server that guides AI agents through Standard Operating Procedures (SOPs)
 sequenceDiagram
     participant Agent as AI Agent<br/>(Claude/Kiro)
     participant Server as sop-mcp<br/>Server
-    participant Storage as src/sops/<br/>{name}/v*.md
+    participant Storage as Storage Backend<br/>(configurable)
 
     Note over Agent,Storage: Initialize
     Agent->>Server: run_authoring_new_sop()
@@ -40,9 +40,10 @@ sequenceDiagram
 
 ## How It Works
 
-1. SOPs are stored as versioned markdown files in `src/sops/<sop_name>/v<version>.md`
-2. On startup, the server scans `src/sops/` and registers a `run_<sop_name>` tool for each SOP
-3. New SOPs can be published at runtime via `publish_sop` (server restart needed to register the new tool)
+1. SOPs are stored as versioned markdown files in `<storage_dir>/<sop_name>/v<version>.md`
+2. On startup, the server initializes the configured storage backend and registers a `run_<sop_name>` tool for each discovered SOP
+3. On first run, bundled SOPs are automatically copied (seeded) into the persistent storage directory
+4. New SOPs can be published at runtime via `publish_sop` (server restart needed to register the new tool)
 
 ### Tool Parameters
 
@@ -100,6 +101,41 @@ uv run sop-mcp
 ```bash
 uv run pytest
 ```
+
+## Storage Configuration
+
+By default, SOPs are stored in a persistent platform-specific data directory and bundled SOPs are automatically seeded on first run:
+
+- **macOS**: `~/Library/Application Support/sop-mcp`
+- **Linux**: `~/.local/share/sop-mcp`
+- **Windows**: `%LOCALAPPDATA%/sop-mcp`
+
+### Environment Variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `SOP_STORAGE_DIR` | Override the storage directory path | `platformdirs` user data dir |
+| `SOP_STORAGE_BACKEND` | Set to `"bundled"` to use the package's built-in directory (ephemeral with `uvx`) | `"local"` |
+
+### Example: Custom Storage Directory
+
+```json
+{
+  "mcpServers": {
+    "sop-mcp": {
+      "command": "uvx",
+      "args": ["sop-mcp"],
+      "env": {
+        "SOP_STORAGE_DIR": "/path/to/my/sops"
+      }
+    }
+  }
+}
+```
+
+### Ephemeral Storage Note
+
+When using `SOP_STORAGE_BACKEND=bundled`, SOPs are read from and written to the package's built-in `src/sops/` directory. If the server is installed via `uvx`, this directory lives inside an ephemeral cache — published SOPs and feedback may be lost when the cache is refreshed. The server will include a warning in `publish_sop` and `submit_sop_feedback` responses when operating in ephemeral mode.
 
 ## Writing an SOP
 

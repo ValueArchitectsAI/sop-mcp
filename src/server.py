@@ -10,12 +10,21 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from src.utils import SOP, SOPS_DIR, list_available_sops, list_versions, resolve_sop
+from src.utils import SOP, get_storage_backend
 
 logger = logging.getLogger(__name__)
 
 # Initialize FastMCP server
 mcp = FastMCP("SOP MCP Server")
+
+# Initialize storage backend at module level (Requirement 6.1)
+backend = get_storage_backend()
+
+EPHEMERAL_WARNING = (
+    "⚠️ WARNING: This data was written to ephemeral storage and may be lost "
+    "when the package cache is refreshed. Set the SOP_STORAGE_DIR environment "
+    "variable to a persistent path to avoid data loss."
+)
 
 
 def _build_step_instruction(step_content: str, current_step: int, total_steps: int, is_complete: bool) -> str:
@@ -56,7 +65,8 @@ def _create_sop_handler(sop_name: str):
         logger.info("Invoking %s with args: current_step=%s, version=%s", tool_name, current_step, version)
 
         try:
-            sop = resolve_sop(sop_name, version)
+            content = backend.read_sop(sop_name, version)
+            sop = SOP.from_content(content)
         except FileNotFoundError as e:
             logger.warning("%s error: %s", tool_name, e)
             return {"error": str(e)}
@@ -140,25 +150,68 @@ def publish_sop(content: str, change_type: str = "minor") -> dict[str, Any]:
     The version is written into the document and the SOP becomes the latest.
     """
     logger.info("Invoking publish_sop with args: content=<%s chars>, change_type=%s", len(content), change_type)
+
+    if not content or not content.strip():
+        return {"error": "SOP content is required"}
+
+    if change_type not in ("major", "minor", "patch"):
+        return {"error": f"Invalid change_type '{change_type}'. Must be one of: major, minor, patch"}
+
     try:
-        sop = SOP.publish(content, change_type)
+        sop = SOP.from_content(content)
     except ValueError as e:
         logger.warning("publish_sop error: %s", e)
         return {"error": str(e)}
 
+    # Determine the new version by inspecting existing versions in the backend
+    from src.utils.sop_parser import _parse_semver, _set_version_in_content
+
+    existing_versions = backend.list_versions(sop.name)
+    if not existing_versions:
+        new_version = "1.0.0"
+    else:
+        latest = max(existing_versions, key=_parse_semver)
+        parts = list(_parse_semver(latest))
+        while len(parts) < 3:
+            parts.append(0)
+        if change_type == "major":
+            parts[0] += 1
+            parts[1] = 0
+            parts[2] = 0
+        elif change_type == "minor":
+            parts[1] += 1
+            parts[2] = 0
+        elif change_type == "patch":
+            parts[2] += 1
+        new_version = ".".join(str(p) for p in parts)
+
+    # Update version in content and write via backend
+    content = _set_version_in_content(content, new_version)
+    try:
+        backend.write_sop(sop.name, new_version, content)
+    except OSError as e:
+        logger.warning("publish_sop error: %s", e)
+        return {"error": str(e)}
+
+    # Re-parse to get final state
+    sop = SOP.from_content(content)
+
     logger.info("publish_sop completed successfully")
-    return {
+    result: dict[str, Any] = {
         "success": True,
         "sop_name": sop.name,
         "title": sop.title,
-        "version": sop.version,
+        "version": new_version,
         "change_type": change_type,
         "total_steps": sop.total_steps,
         "message": (
-            f"SOP '{sop.name}' published as v{sop.version} ({change_type}). "
+            f"SOP '{sop.name}' published as v{new_version} ({change_type}). "
             "Restart the server to register the new tool."
         ),
     }
+    if backend.is_ephemeral:
+        result["warning"] = EPHEMERAL_WARNING
+    return result
 
 
 @mcp.tool()
@@ -174,50 +227,38 @@ def submit_sop_feedback(sop_name: str, feedback: str) -> dict[str, Any]:
         feedback: The improvement suggestion or feedback text.
     """
     logger.info("Invoking submit_sop_feedback with args: sop_name=%s, feedback=<%s chars>", sop_name, len(feedback))
-    available = list_available_sops()
+    available = backend.list_sops()
     if sop_name not in available:
         logger.warning("submit_sop_feedback error: SOP '%s' not found", sop_name)
         return {"error": f"SOP '{sop_name}' not found. Available: {', '.join(available)}"}
 
     try:
-        sop = SOP(sop_name)
+        content = backend.read_sop(sop_name)
+        sop = SOP.from_content(content)
     except (FileNotFoundError, ValueError) as e:
         logger.warning("submit_sop_feedback error: %s", e)
         return {"error": str(e)}
 
-    feedback_path = SOPS_DIR / sop_name / "feedback.md"
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-
     entry = f"## Feedback — {timestamp}\n\n**SOP Version:** v{sop.version}\n\n{feedback}\n\n---\n\n"
 
     try:
-        # Append to existing file or create with header
-        if feedback_path.exists():
-            feedback_path.open("a", encoding="utf-8").write(entry)
-        else:
-            header = (
-                f"# Feedback Log — {sop.title}\n\n"
-                "This file collects improvement feedback for future SOP revisions.\n\n---\n\n"
-            )
-            feedback_path.write_text(header + entry, encoding="utf-8")
+        backend.append_feedback(sop_name, entry)
     except OSError as e:
         logger.warning("Failed to write feedback for %s: %s", sop_name, e)
         return {"error": f"Failed to write feedback file: {e}"}
 
-    logger.info(
-        "Feedback submitted for %s v%s at %s",
-        sop_name,
-        sop.version,
-        timestamp,
-    )
-    return {
+    logger.info("Feedback submitted for %s v%s at %s", sop_name, sop.version, timestamp)
+    result: dict[str, Any] = {
         "success": True,
         "sop_name": sop_name,
         "sop_version": sop.version,
         "timestamp": timestamp,
-        "feedback_file": str(feedback_path),
         "message": f"Feedback recorded for '{sop_name}' (v{sop.version}). It will be considered in the next revision.",
     }
+    if backend.is_ephemeral:
+        result["warning"] = EPHEMERAL_WARNING
+    return result
 
 
 # --- Explain SOP tool ---
@@ -229,13 +270,14 @@ def explain_sop(sop_name: str | None = None) -> dict[str, Any]:
 
     Call with no arguments to list all SOPs, or pass a specific sop_name to get its full overview and step outline."""
     logger.info("Invoking explain_sop with args: sop_name=%s", sop_name)
-    available = list_available_sops()
+    available = backend.list_sops()
 
     if sop_name is None:
         summaries = []
         for name in available:
             try:
-                sop = SOP(name)
+                content = backend.read_sop(name)
+                sop = SOP.from_content(content)
                 summaries.append(
                     {
                         "name": name,
@@ -255,7 +297,8 @@ def explain_sop(sop_name: str | None = None) -> dict[str, Any]:
         return {"error": f"SOP '{sop_name}' not found. Available: {', '.join(available)}"}
 
     try:
-        sop = SOP(sop_name)
+        content = backend.read_sop(sop_name)
+        sop = SOP.from_content(content)
     except (FileNotFoundError, ValueError) as e:
         logger.warning("explain_sop error: %s", e)
         return {"error": str(e)}
@@ -278,13 +321,14 @@ def explain_sop(sop_name: str | None = None) -> dict[str, Any]:
 
 def register_sop_tools():
     """Register one run_ tool per SOP folder with optional version parameter."""
-    for sop_name in list_available_sops():
+    for sop_name in backend.list_sops():
         try:
-            sop = SOP(sop_name)
+            content = backend.read_sop(sop_name)
+            sop = SOP.from_content(content)
         except (FileNotFoundError, ValueError):
             continue
 
-        versions = list_versions(sop_name)
+        versions = backend.list_versions(sop_name)
         version_info = ", ".join(f"v{v}" for v in versions)
 
         mcp.tool(

@@ -42,9 +42,9 @@ class SOP:
         tool_name: Tool name slug derived from the document ID.
     """
 
-    def __init__(self, name: str, version: str | None = None) -> None:
+    def __init__(self, name: str, version: str | None = None, base_dir: Path | None = None) -> None:
         self.name = name
-        sop_dir = SOPS_DIR / name
+        sop_dir = (base_dir or SOPS_DIR) / name
 
         if version is not None:
             self.path = sop_dir / f"v{version}.md"

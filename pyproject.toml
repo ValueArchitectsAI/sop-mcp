@@ -19,6 +19,7 @@ classifiers = [
 ]
 dependencies = [
     "mcp>=1.0.0",
+    "platformdirs>=4.0.0",
 ]
 
 [project.urls]
@@ -28,6 +29,7 @@ Issues = "https://github.com/ValueArchitectsAI/sop-mcp/issues"
 
 [tool.uv]
 dev-dependencies = [
+    "hypothesis>=6.0.0",
     "pytest>=8.0.0",
     "pytest-asyncio>=1.0.0",
     "pyyaml>=6.0.3",
