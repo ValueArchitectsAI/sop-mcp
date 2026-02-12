@@ -9,7 +9,7 @@ Tests cover:
 
 import pytest
 
-from src.utils.sop_parser import SOP, SOPS_DIR, list_available_sops
+from src.utils.sop_parser import SOP, list_available_sops
 
 
 class TestSopTitleExtraction:

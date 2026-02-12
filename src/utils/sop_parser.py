@@ -16,7 +16,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-
 # Directory where SOP files are stored, relative to the src directory
 SOPS_DIR = Path(__file__).parent.parent / "sops"
 
@@ -151,6 +150,7 @@ class SOP:
 
 # --- Internal parsing helpers ---
 
+
 def _parse_content(content: str) -> dict[str, Any]:
     """Parse SOP markdown content and extract title, overview, steps, and version."""
     title = _extract_title(content)
@@ -240,6 +240,7 @@ def _name_to_tool_name(sop_name: str) -> str:
 
 # --- Module-level utilities ---
 
+
 def list_available_sops() -> list[str]:
     """Return sorted list of available SOP folder names from the sops directory.
 
@@ -302,10 +303,7 @@ def resolve_sop(sop_name: str, version: str | None = None) -> SOP:
         pass
 
     available = list_versions(sop_name)
-    raise ValueError(
-        f"Version '{version}' not found for '{sop_name}'. "
-        f"Available versions: {', '.join(available)}"
-    )
+    raise ValueError(f"Version '{version}' not found for '{sop_name}'. Available versions: {', '.join(available)}")
 
 
 def _bump_version(sop_name: str, change_type: str) -> str:

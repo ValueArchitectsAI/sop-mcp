@@ -9,8 +9,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from src.utils import SOP, SOPS_DIR, list_available_sops, resolve_sop, list_versions
-
+from src.utils import SOP, SOPS_DIR, list_available_sops, list_versions, resolve_sop
 
 # Initialize FastMCP server
 mcp = FastMCP("SOP MCP Server")
@@ -42,6 +41,7 @@ def _build_step_instruction(step_content: str, current_step: int, total_steps: i
 
 def _create_sop_handler(sop_name: str):
     """Create a handler function for an SOP tool that supports an optional version parameter."""
+
     def handler(current_step: int | None = None, version: str | None = None) -> dict[str, Any]:
         """Execute an SOP step by step.
 
@@ -83,7 +83,9 @@ def _create_sop_handler(sop_name: str):
             return {
                 "sop_name": sop.name,
                 "sop_version": sop.version,
-                "instruction": _build_step_instruction(sop.steps[current_step - 1], current_step, sop.total_steps, True),
+                "instruction": _build_step_instruction(
+                    sop.steps[current_step - 1], current_step, sop.total_steps, True
+                ),
                 "current_step": current_step,
                 "total_steps": sop.total_steps,
                 "step_content": sop.steps[current_step - 1],
@@ -110,6 +112,7 @@ def _create_sop_handler(sop_name: str):
 
 # --- Publish SOP tool ---
 
+
 @mcp.tool()
 def publish_sop(content: str, change_type: str = "minor") -> dict[str, Any]:
     """Publish a new or updated Standard Operating Procedure document.
@@ -135,8 +138,12 @@ def publish_sop(content: str, change_type: str = "minor") -> dict[str, Any]:
         "version": sop.version,
         "change_type": change_type,
         "total_steps": sop.total_steps,
-        "message": f"SOP '{sop.name}' published as v{sop.version} ({change_type}). Restart the server to register the new tool.",
+        "message": (
+            f"SOP '{sop.name}' published as v{sop.version} ({change_type}). "
+            "Restart the server to register the new tool."
+        ),
     }
+
 
 @mcp.tool()
 def submit_sop_feedback(sop_name: str, feedback: str) -> dict[str, Any]:
@@ -168,7 +175,10 @@ def submit_sop_feedback(sop_name: str, feedback: str) -> dict[str, Any]:
     if feedback_path.exists():
         feedback_path.open("a", encoding="utf-8").write(entry)
     else:
-        header = f"# Feedback Log — {sop.title}\n\nThis file collects improvement feedback for future SOP revisions.\n\n---\n\n"
+        header = (
+            f"# Feedback Log — {sop.title}\n\n"
+            "This file collects improvement feedback for future SOP revisions.\n\n---\n\n"
+        )
         feedback_path.write_text(header + entry, encoding="utf-8")
 
     return {
@@ -181,12 +191,14 @@ def submit_sop_feedback(sop_name: str, feedback: str) -> dict[str, Any]:
     }
 
 
-
 # --- Explain SOP tool ---
+
 
 @mcp.tool()
 def explain_sop(sop_name: str | None = None) -> dict[str, Any]:
-    """Get details about available SOPs. Call with no arguments to list all SOPs, or pass a specific sop_name to get its full overview and step outline."""
+    """Get details about available SOPs.
+
+    Call with no arguments to list all SOPs, or pass a specific sop_name to get its full overview and step outline."""
     available = list_available_sops()
 
     if sop_name is None:
@@ -194,7 +206,15 @@ def explain_sop(sop_name: str | None = None) -> dict[str, Any]:
         for name in available:
             try:
                 sop = SOP(name)
-                summaries.append({"name": name, "title": sop.title, "version": sop.version, "overview": sop.truncated_overview, "total_steps": sop.total_steps})
+                summaries.append(
+                    {
+                        "name": name,
+                        "title": sop.title,
+                        "version": sop.version,
+                        "overview": sop.truncated_overview,
+                        "total_steps": sop.total_steps,
+                    }
+                )
             except (FileNotFoundError, ValueError):
                 summaries.append({"name": name, "error": "Could not parse SOP"})
         return {"available_sops": summaries, "total": len(summaries)}
@@ -221,10 +241,9 @@ def explain_sop(sop_name: str | None = None) -> dict[str, Any]:
 
 # --- Dynamic SOP tool registration ---
 
+
 def register_sop_tools():
     """Register one run_ tool per SOP folder with optional version parameter."""
-    from src.utils.sop_parser import _parse_semver
-
     for sop_name in list_available_sops():
         try:
             sop = SOP(sop_name)
@@ -240,9 +259,10 @@ def register_sop_tools():
                 f"{sop.title}. {sop.truncated_overview}\n\n"
                 f"Available versions: {version_info}. Defaults to latest (v{sop.version}).\n\n"
                 "The 'version' parameter is optional and defaults to the latest version.\n\n"
-                "IMPORTANT: When you call this tool, you MUST execute ALL actions described in the returned step_content. "
-                "Do NOT just read or summarize the step — perform the actions using your available tools. "
-                "After completing a step, call this tool again with the current_step value to advance to the next step."
+                "IMPORTANT: When you call this tool, you MUST execute ALL actions described in the "
+                "returned step_content. Do NOT just read or summarize the step — perform the actions "
+                "using your available tools. After completing a step, call this tool again with the "
+                "current_step value to advance to the next step."
             ),
         )(_create_sop_handler(sop_name))
 
