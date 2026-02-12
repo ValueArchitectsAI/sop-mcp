@@ -12,7 +12,6 @@ from hypothesis import strategies as st
 
 from src.utils.storage_local import LocalFilesystemBackend
 
-
 # --- Strategies ---
 
 sop_name_segment = st.text(
