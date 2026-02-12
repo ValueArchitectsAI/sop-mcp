@@ -212,3 +212,6 @@ __marimo__/
 # SOPs - ignore all except authoring_new_sop
 src/sops/*
 !src/sops/authoring_new_sop/
+
+# SOP feedback files (generated at runtime by E2E tests and users)
+**/feedback.md
