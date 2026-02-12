@@ -30,6 +30,7 @@ Issues = "https://github.com/ValueArchitectsAI/sop-mcp/issues"
 dev-dependencies = [
     "pytest>=8.0.0",
     "pytest-asyncio>=1.0.0",
+    "pyyaml>=6.0.3",
     "ruff>=0.8.0",
 ]
 

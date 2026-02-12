@@ -27,17 +27,17 @@ Enhance the `sop-mcp` project for PyPI publishing readiness, add GitHub Actions 
   - Run `uv run ruff check .` and `uv run ruff format --check .` and fix any issues in `src/` and `tests/`
   - _Requirements: 5.1, 5.2, 5.3_
 
-- [ ] 3. Checkpoint - Verify metadata and linting
+- [x] 3. Checkpoint - Verify metadata and linting
   - Ensure `uv run pytest` passes, `uv run ruff check .` passes, and `uv run ruff format --check .` passes. Ask the user if questions arise.
 
-- [ ] 4. Add structured logging to MCP server
-  - [ ] 4.1 Add module-level logger and tool invocation logging in `src/server.py`
+- [x] 4. Add structured logging to MCP server
+  - [x] 4.1 Add module-level logger and tool invocation logging in `src/server.py`
     - Add `import logging` and `logger = logging.getLogger(__name__)`
     - Add INFO log on tool entry (tool name + args) in `_create_sop_handler`, `publish_sop`, `submit_sop_feedback`, and `explain_sop`
     - Add INFO log on successful completion
     - Add WARNING log on error paths
     - _Requirements: 7.1, 7.2, 7.3, 7.4_
-  - [ ] 4.2 Add feedback-specific logging in `submit_sop_feedback`
+  - [x] 4.2 Add feedback-specific logging in `submit_sop_feedback`
     - Log SOP name, version, and timestamp on successful feedback submission
     - Wrap feedback file writing in try/except, log WARNING on write failure, return error response
     - _Requirements: 8.1, 8.2_
@@ -53,18 +53,18 @@ Enhance the `sop-mcp` project for PyPI publishing readiness, add GitHub Actions 
     - **Property 4: Feedback submission logging includes SOP metadata** — For any SOP name and version, the log contains the SOP name, version, and timestamp pattern
     - **Validates: Requirements 8.1**
 
-- [ ] 5. Checkpoint - Verify logging
+- [x] 5. Checkpoint - Verify logging
   - Ensure all tests pass with `uv run pytest`. Ask the user if questions arise.
 
-- [ ] 6. Create GitHub Actions CI workflow
-  - [ ] 6.1 Create `.github/workflows/ci.yml`
+- [x] 6. Create GitHub Actions CI workflow
+  - [x] 6.1 Create `.github/workflows/ci.yml`
     - Trigger on `push` to `main` and `pull_request` targeting `main`
     - Use `actions/checkout@v4`, `actions/setup-python@v5` (with python-version-file), `astral-sh/setup-uv@v4`
     - Steps: `uv sync`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run pytest`, `uv build`
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 6.1, 6.2_
 
-- [ ] 7. Create GitHub Actions CD workflow
-  - [ ] 7.1 Create `.github/workflows/workflow.yaml`
+- [x] 7. Create GitHub Actions CD workflow
+  - [x] 7.1 Create `.github/workflows/workflow.yaml`
     - Trigger on `release` type `published`
     - Use `actions/checkout@v4`, `actions/setup-python@v5`, `astral-sh/setup-uv@v4`
     - Steps: `uv build`, then `pypa/gh-action-pypi-publish@release/v1`
@@ -72,12 +72,12 @@ Enhance the `sop-mcp` project for PyPI publishing readiness, add GitHub Actions 
     - Set `environment: pypi`
     - Filename MUST be `workflow.yaml` to match PyPI trusted publisher configuration
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
-  - [ ]* 7.2 Write example tests for workflow YAML validation
+  - [x] 7.2 Write example tests for workflow YAML validation
     - Create `tests/test_workflows.py`
     - Parse CI and CD workflow YAML files and verify triggers, action references, and key steps
     - _Requirements: 3.1, 3.2, 3.4, 4.1, 4.4_
 
-- [ ] 8. Final checkpoint - Full validation
+- [x] 8. Final checkpoint - Full validation
   - Ensure all tests pass with `uv run pytest`, linting passes with `uv run ruff check .` and `uv run ruff format --check .`, and `uv build` succeeds. Ask the user if questions arise.
 
 ## Notes

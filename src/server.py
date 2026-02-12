@@ -4,12 +4,15 @@ This module contains the MCP server with dynamically registered SOP tools
 using FastMCP (high-level MCP SDK API).
 """
 
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
 from src.utils import SOP, SOPS_DIR, list_available_sops, list_versions, resolve_sop
+
+logger = logging.getLogger(__name__)
 
 # Initialize FastMCP server
 mcp = FastMCP("SOP MCP Server")
@@ -49,19 +52,26 @@ def _create_sop_handler(sop_name: str):
             current_step: The step to advance from. Omit to start from the beginning.
             version: Optional semantic version (e.g. "1.0", "2.1.0"). Defaults to latest.
         """
+        tool_name = f"run_{sop_name}"
+        logger.info("Invoking %s with args: current_step=%s, version=%s", tool_name, current_step, version)
+
         try:
             sop = resolve_sop(sop_name, version)
         except FileNotFoundError as e:
+            logger.warning("%s error: %s", tool_name, e)
             return {"error": str(e)}
         except ValueError as e:
+            logger.warning("%s error: %s", tool_name, e)
             return {"error": str(e)}
 
         if sop.total_steps == 0:
+            logger.warning("%s error: SOP has no steps", tool_name)
             return {"error": "SOP has no steps"}
 
         # If no current_step provided, start from step 1 with overview
         if current_step is None:
             is_complete = sop.total_steps == 1
+            logger.info("%s completed successfully", tool_name)
             return {
                 "sop_name": sop.name,
                 "sop_version": sop.version,
@@ -76,10 +86,12 @@ def _create_sop_handler(sop_name: str):
 
         # Validate step number
         if current_step < 1 or current_step > sop.total_steps:
+            logger.warning("%s error: Invalid step %s", tool_name, current_step)
             return {"error": f"Invalid step {current_step}. SOP has {sop.total_steps} steps (1-{sop.total_steps})."}
 
         # Check if already complete
         if current_step == sop.total_steps:
+            logger.info("%s completed successfully", tool_name)
             return {
                 "sop_name": sop.name,
                 "sop_version": sop.version,
@@ -96,6 +108,7 @@ def _create_sop_handler(sop_name: str):
         # Return next step
         next_step = current_step + 1
         is_complete = next_step == sop.total_steps
+        logger.info("%s completed successfully", tool_name)
         return {
             "sop_name": sop.name,
             "sop_version": sop.version,
@@ -126,11 +139,14 @@ def publish_sop(content: str, change_type: str = "minor") -> dict[str, Any]:
     For brand-new SOPs the initial version is 1.0.0 regardless of change_type.
     The version is written into the document and the SOP becomes the latest.
     """
+    logger.info("Invoking publish_sop with args: content=<%s chars>, change_type=%s", len(content), change_type)
     try:
         sop = SOP.publish(content, change_type)
     except ValueError as e:
+        logger.warning("publish_sop error: %s", e)
         return {"error": str(e)}
 
+    logger.info("publish_sop completed successfully")
     return {
         "success": True,
         "sop_name": sop.name,
@@ -157,13 +173,16 @@ def submit_sop_feedback(sop_name: str, feedback: str) -> dict[str, Any]:
         sop_name: Name of the SOP to provide feedback for (e.g. "authoring_new_sop").
         feedback: The improvement suggestion or feedback text.
     """
+    logger.info("Invoking submit_sop_feedback with args: sop_name=%s, feedback=<%s chars>", sop_name, len(feedback))
     available = list_available_sops()
     if sop_name not in available:
+        logger.warning("submit_sop_feedback error: SOP '%s' not found", sop_name)
         return {"error": f"SOP '{sop_name}' not found. Available: {', '.join(available)}"}
 
     try:
         sop = SOP(sop_name)
     except (FileNotFoundError, ValueError) as e:
+        logger.warning("submit_sop_feedback error: %s", e)
         return {"error": str(e)}
 
     feedback_path = SOPS_DIR / sop_name / "feedback.md"
@@ -171,16 +190,26 @@ def submit_sop_feedback(sop_name: str, feedback: str) -> dict[str, Any]:
 
     entry = f"## Feedback — {timestamp}\n\n**SOP Version:** v{sop.version}\n\n{feedback}\n\n---\n\n"
 
-    # Append to existing file or create with header
-    if feedback_path.exists():
-        feedback_path.open("a", encoding="utf-8").write(entry)
-    else:
-        header = (
-            f"# Feedback Log — {sop.title}\n\n"
-            "This file collects improvement feedback for future SOP revisions.\n\n---\n\n"
-        )
-        feedback_path.write_text(header + entry, encoding="utf-8")
+    try:
+        # Append to existing file or create with header
+        if feedback_path.exists():
+            feedback_path.open("a", encoding="utf-8").write(entry)
+        else:
+            header = (
+                f"# Feedback Log — {sop.title}\n\n"
+                "This file collects improvement feedback for future SOP revisions.\n\n---\n\n"
+            )
+            feedback_path.write_text(header + entry, encoding="utf-8")
+    except OSError as e:
+        logger.warning("Failed to write feedback for %s: %s", sop_name, e)
+        return {"error": f"Failed to write feedback file: {e}"}
 
+    logger.info(
+        "Feedback submitted for %s v%s at %s",
+        sop_name,
+        sop.version,
+        timestamp,
+    )
     return {
         "success": True,
         "sop_name": sop_name,
@@ -199,6 +228,7 @@ def explain_sop(sop_name: str | None = None) -> dict[str, Any]:
     """Get details about available SOPs.
 
     Call with no arguments to list all SOPs, or pass a specific sop_name to get its full overview and step outline."""
+    logger.info("Invoking explain_sop with args: sop_name=%s", sop_name)
     available = list_available_sops()
 
     if sop_name is None:
@@ -217,18 +247,22 @@ def explain_sop(sop_name: str | None = None) -> dict[str, Any]:
                 )
             except (FileNotFoundError, ValueError):
                 summaries.append({"name": name, "error": "Could not parse SOP"})
+        logger.info("explain_sop completed successfully")
         return {"available_sops": summaries, "total": len(summaries)}
 
     if sop_name not in available:
+        logger.warning("explain_sop error: SOP '%s' not found", sop_name)
         return {"error": f"SOP '{sop_name}' not found. Available: {', '.join(available)}"}
 
     try:
         sop = SOP(sop_name)
     except (FileNotFoundError, ValueError) as e:
+        logger.warning("explain_sop error: %s", e)
         return {"error": str(e)}
 
     step_outline = [step.splitlines()[0].replace("### ", "") for step in sop.steps]
 
+    logger.info("explain_sop completed successfully")
     return {
         "sop_name": sop.name,
         "title": sop.title,
