@@ -1,14 +1,13 @@
 {
   "mcpServers": {
-  
-   
     "sop-mcp": {
-      "command": "/opt/homebrew/bin/uv",
+      "command": "uv",
       "args": [
         "run",
+        "--directory",
+        "/Volumes/workplace/gh/sop-mcp",
         "sop-mcp"
       ],
-      "cwd": "/Volumes/workplace/gh/sop-mcp",
       "autoApprove": [
         "publish_sop"
       ]
