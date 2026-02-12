@@ -162,7 +162,7 @@ Every SOP markdown file must include:
 - An `## Overview` section
 - One or more `### Step N:` sections
 
-Use RFC 2119 keywords (MUST, SHOULD, MAY) to define requirement levels. Run the built-in `run_sop_creation_guide` tool for guided SOP creation.
+Use RFC 2119 keywords (MUST, SHOULD, MAY) to define requirement levels. Each step SHOULD include a `**Time Estimate:**` field with the expected duration in minutes (e.g. `**Time Estimate:** 30 minutes`). Run the built-in `run_sop_creation_guide` tool for guided SOP creation.
 
 ## Publishing an SOP
 

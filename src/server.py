@@ -209,8 +209,18 @@ def publish_sop(content: str, change_type: str = "minor") -> dict[str, Any]:
             "Restart the server to register the new tool."
         ),
     }
+    warnings = []
     if backend.is_ephemeral:
-        result["warning"] = EPHEMERAL_WARNING
+        warnings.append(EPHEMERAL_WARNING)
+    # Check for missing time estimates in steps
+    steps_missing_time = [i + 1 for i, step in enumerate(sop.steps) if "**Time Estimate:**" not in step]
+    if steps_missing_time:
+        warnings.append(
+            f"Steps {', '.join(str(s) for s in steps_missing_time)} are missing a "
+            "**Time Estimate:** field. Each step SHOULD include an estimated duration in minutes."
+        )
+    if warnings:
+        result["warning"] = " | ".join(warnings)
     return result
 
 

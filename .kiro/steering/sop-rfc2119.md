@@ -37,6 +37,11 @@ When discussing SOP (Standard Operating Procedure), the following RFC 2119 key w
 - Must not be used to impose a particular method where not required for interoperability
 - Consider security implications when not following MUST/SHOULD requirements
 
+## SOP Authoring Guidelines
+
+- Each step in an SOP SHOULD include a `**Time Estimate:**` field with the expected duration in minutes (e.g. `**Time Estimate:** 30 minutes`)
+- This helps agents and humans plan execution time and track progress
+
 ## Reference
 
 Based on RFC 2119: https://datatracker.ietf.org/doc/html/rfc2119
