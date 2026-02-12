@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "sop-mcp": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/Volumes/workplace/gh/sop-mcp",
+        "sop-mcp"
+      ],
+      "autoApprove": [
+        "publish_sop"
+      ]
+    }
+  }
+}

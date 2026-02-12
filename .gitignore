@@ -205,3 +205,13 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Kiro MCP config (contains local paths)
+.kiro/settings/mcp.json
+
+# SOPs - ignore all except sop_creation_guide
+src/sops/*
+!src/sops/sop_creation_guide/
+
+# SOP feedback files (generated at runtime by E2E tests and users)
+**/feedback.md

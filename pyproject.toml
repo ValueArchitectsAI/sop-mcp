@@ -1,0 +1,60 @@
+[project]
+name = "sop-mcp"
+version = "0.1.0"
+description = "An MCP server for guiding users through Standard Operating Procedures"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+keywords = ["mcp", "sop", "standard-operating-procedure", "ai-agent"]
+authors = [
+    { name = "ValueArchitectsAI", email = "info@valuearchitects.ai" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "mcp>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/ValueArchitectsAI/sop-mcp"
+Repository = "https://github.com/ValueArchitectsAI/sop-mcp"
+Issues = "https://github.com/ValueArchitectsAI/sop-mcp/issues"
+
+[tool.uv]
+dev-dependencies = [
+    "hypothesis>=6.0.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=1.0.0",
+    "pyyaml>=6.0.3",
+    "ruff>=0.8.0",
+]
+
+[project.scripts]
+sop-mcp = "src.server:run"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v"
+asyncio_mode = "auto"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
