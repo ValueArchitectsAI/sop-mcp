@@ -28,7 +28,7 @@ Issues = "https://github.com/ValueArchitectsAI/sop-mcp/issues"
 
 [tool.uv]
 dev-dependencies = [
-    "hypothesis>=6.0.0",
+    "hypothesis>=6.0.0,<6.150.0",
     "pytest>=8.0.0",
     "pytest-asyncio>=1.0.0",
     "pyyaml>=6.0.3",
