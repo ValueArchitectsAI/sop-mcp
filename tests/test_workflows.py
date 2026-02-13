@@ -20,9 +20,9 @@ def _load_workflow(filename: str) -> dict:
 class TestCIWorkflow:
     """Validate CI workflow triggers, actions, and steps."""
 
-    def test_triggers_on_push_to_any_branch(self):
+    def test_triggers_on_push(self):
         wf = _load_workflow("ci.yml")
-        triggers = wf[True]  # PyYAML parses 'on' as boolean True
+        triggers = wf[True]
         assert "push" in triggers
 
     def test_triggers_on_pull_request(self):
@@ -30,17 +30,38 @@ class TestCIWorkflow:
         triggers = wf[True]
         assert "pull_request" in triggers
 
-    def test_lint_job_exists(self):
-        wf = _load_workflow("ci.yml")
-        assert "lint" in wf["jobs"]
-
     def test_test_job_exists(self):
         wf = _load_workflow("ci.yml")
         assert "test" in wf["jobs"]
 
+    def test_lint_job_exists(self):
+        wf = _load_workflow("ci.yml")
+        assert "lint" in wf["jobs"]
+
     def test_build_job_exists(self):
         wf = _load_workflow("ci.yml")
         assert "build" in wf["jobs"]
+
+    def test_test_uses_tox(self):
+        wf = _load_workflow("ci.yml")
+        steps = wf["jobs"]["test"]["steps"]
+        run_cmds = [s.get("run", "") for s in steps]
+        assert any("tox" in cmd for cmd in run_cmds)
+
+    def test_lint_uses_tox(self):
+        wf = _load_workflow("ci.yml")
+        steps = wf["jobs"]["lint"]["steps"]
+        run_cmds = [s.get("run", "") for s in steps]
+        assert any("tox -e lint" in cmd for cmd in run_cmds)
+
+    def test_test_matrix_includes_all_versions(self):
+        wf = _load_workflow("ci.yml")
+        matrix = wf["jobs"]["test"]["strategy"]["matrix"]["include"]
+        versions = [entry["python-version"] for entry in matrix]
+        assert "3.10" in versions
+        assert "3.11" in versions
+        assert "3.12" in versions
+        assert "3.13" in versions
 
     def test_uses_checkout_and_uv(self):
         wf = _load_workflow("ci.yml")
@@ -48,19 +69,6 @@ class TestCIWorkflow:
         action_refs = [s.get("uses", "") for s in steps]
         assert any("actions/checkout@" in a for a in action_refs)
         assert any("astral-sh/setup-uv@" in a for a in action_refs)
-
-    def test_runs_pytest(self):
-        wf = _load_workflow("ci.yml")
-        steps = wf["jobs"]["test"]["steps"]
-        run_cmds = [s.get("run", "") for s in steps]
-        assert any("uv run pytest" in cmd for cmd in run_cmds)
-
-    def test_runs_ruff_checks(self):
-        wf = _load_workflow("ci.yml")
-        steps = wf["jobs"]["lint"]["steps"]
-        run_cmds = [s.get("run", "") for s in steps]
-        assert any("ruff check" in cmd for cmd in run_cmds)
-        assert any("ruff format --check" in cmd for cmd in run_cmds)
 
 
 class TestPublishWorkflow:
@@ -116,3 +124,9 @@ class TestPublishWorkflow:
         pypi_steps = [s for s in steps if "pypa/gh-action-pypi-publish@" in s.get("uses", "")]
         assert len(pypi_steps) == 1
         assert "test.pypi.org" in pypi_steps[0]["with"]["repository-url"]
+
+    def test_test_uses_tox(self):
+        wf = _load_workflow("publish.yml")
+        steps = wf["jobs"]["test"]["steps"]
+        run_cmds = [s.get("run", "") for s in steps]
+        assert any("tox" in cmd for cmd in run_cmds)

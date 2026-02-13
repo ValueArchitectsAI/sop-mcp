@@ -6,8 +6,16 @@ and correct ruff linter configuration.
 Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 5.1, 5.2, 5.3
 """
 
-import tomllib
+import sys
 from pathlib import Path
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        import tomli as tomllib  # type: ignore[no-redef]
 
 
 def _load_pyproject() -> dict:
@@ -66,7 +74,7 @@ class TestRuffConfig:
 
     def test_target_version(self):
         data = _load_pyproject()
-        assert data["tool"]["ruff"]["target-version"] == "py312"
+        assert data["tool"]["ruff"]["target-version"] == "py310"
 
     def test_line_length(self):
         data = _load_pyproject()

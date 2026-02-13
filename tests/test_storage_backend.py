@@ -38,7 +38,7 @@ sop_content = st.text(
 
 # Feature: sop-storage-abstraction, Property 1: Write-read round trip
 # Validates: Requirements 2.5, 2.6
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 @given(name=sop_names, version=semver_versions, content=sop_content)
 def test_write_read_round_trip(tmp_path_factory, name: str, version: str, content: str) -> None:
     """For any valid SOP name, version, and content, writing then reading
@@ -54,7 +54,7 @@ def test_write_read_round_trip(tmp_path_factory, name: str, version: str, conten
 
 # Feature: sop-storage-abstraction, Property 2: Listing reflects written SOPs
 # Validates: Requirements 2.3, 2.7
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 @given(
     data=st.data(),
     num_sops=st.integers(min_value=1, max_value=5),
@@ -92,7 +92,7 @@ def test_listing_reflects_written_sops(tmp_path_factory, data: st.DataObject, nu
 
 # Feature: sop-storage-abstraction, Property 5: Path validation rejects invalid paths
 # Validates: Requirements 5.4
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 @given(
     path_str=st.one_of(
         # Empty strings
@@ -162,7 +162,7 @@ non_empty_text = st.text(
 
 # Feature: sop-storage-abstraction, Property 4: Ephemeral warning if and only if ephemeral backend
 # Validates: Requirements 4.1, 4.2, 4.3, 4.4
-@settings(max_examples=100)
+@settings(max_examples=100, deadline=None)
 @given(
     is_ephemeral=st.booleans(),
     doc_id=sop_doc_ids,

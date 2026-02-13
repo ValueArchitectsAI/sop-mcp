@@ -5,6 +5,8 @@ connects an MCP ClientSession, and exercises the tools through the
 full protocol stack: explain, feedback, and a complete SOP run-through.
 """
 
+from __future__ import annotations
+
 import json
 import shutil
 
@@ -40,7 +42,7 @@ async def session():
             async with ClientSession(read_stream, write_stream) as client:
                 await client.initialize()
                 yield client
-    except (RuntimeError, BaseExceptionGroup):
+    except (RuntimeError, BaseException):
         # anyio raises "Attempted to exit cancel scope in a different task"
         # during teardown — safe to ignore, the subprocess is already gone.
         pass
