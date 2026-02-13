@@ -85,10 +85,10 @@ class TestPublishWorkflow:
         triggers = wf[True]
         assert "published" in triggers["release"]["types"]
 
-    def test_triggers_on_pr_closed(self):
+    def test_triggers_on_pull_request(self):
         wf = _load_workflow("publish.yml")
         triggers = wf[True]
-        assert "closed" in triggers["pull_request"]["types"]
+        assert "pull_request" in triggers
 
     def test_testpypi_job_exists(self):
         wf = _load_workflow("publish.yml")
@@ -124,6 +124,12 @@ class TestPublishWorkflow:
         pypi_steps = [s for s in steps if "pypa/gh-action-pypi-publish@" in s.get("uses", "")]
         assert len(pypi_steps) == 1
         assert "test.pypi.org" in pypi_steps[0]["with"]["repository-url"]
+
+    def test_testpypi_only_runs_for_own_repo(self):
+        wf = _load_workflow("publish.yml")
+        condition = wf["jobs"]["publish-testpypi"]["if"]
+        assert "github.repository" in condition
+        assert "head.repo.full_name" in condition
 
     def test_test_uses_tox(self):
         wf = _load_workflow("publish.yml")
