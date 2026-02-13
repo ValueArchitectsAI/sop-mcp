@@ -12,7 +12,7 @@ jobs:
       - uses: astral-sh/setup-uv@v4
         with:
           version: "latest"
-      - run: uv sync
+      - run: uv sync --frozen
       - run: uv run ruff check src/ tests/
       - run: uv run ruff format --check src/ tests/
 
@@ -27,7 +27,7 @@ jobs:
         with:
           version: "latest"
           python-version: ${{ matrix.python-version }}
-      - run: uv sync
+      - run: uv sync --frozen
       - run: uv run pytest
 
   build:
