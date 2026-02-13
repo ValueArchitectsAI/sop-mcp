@@ -55,12 +55,16 @@ jobs:
       - uses: astral-sh/setup-uv@v4
         with:
           version: "latest"
-      - name: Set dev version
+      - name: Set dev version from commit SHA
         run: |
           VERSION=$(grep '^version' pyproject.toml | sed 's/.*"\(.*\)"/\1/')
-          DEV_VERSION="${VERSION}.dev${{ github.run_number }}"
+          COMMIT_SHA="${{ github.event.pull_request.head.sha }}"
+          SHORT_SHA=$(echo "${COMMIT_SHA}" | cut -c1-7)
+          # PEP 440 requires numeric .devN — convert hex SHA to decimal
+          DEV_NUM=$(printf '%d' "0x${SHORT_SHA}")
+          DEV_VERSION="${VERSION}.dev${DEV_NUM}"
           sed -i "s/^version = \".*\"/version = \"${DEV_VERSION}\"/" pyproject.toml
-          echo "Publishing version: ${DEV_VERSION}"
+          echo "Publishing ${DEV_VERSION} (from ${SHORT_SHA})"
       - run: uv build
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
