@@ -1,13 +1,10 @@
 name: Publish
 
 on:
-  push:
-    tags:
-      - "v*"
-  pull_request:
-    branches: [main]
   release:
     types: [published]
+  pull_request:
+    branches: [main]
 
 jobs:
   test:
@@ -60,7 +57,6 @@ jobs:
           VERSION=$(grep '^version' pyproject.toml | sed 's/.*"\(.*\)"/\1/')
           COMMIT_SHA="${{ github.event.pull_request.head.sha }}"
           SHORT_SHA=$(echo "${COMMIT_SHA}" | cut -c1-7)
-          # PEP 440 requires numeric .devN — convert hex SHA to decimal
           DEV_NUM=$(printf '%d' "0x${SHORT_SHA}")
           DEV_VERSION="${VERSION}.dev${DEV_NUM}"
           sed -i "s/^version = \".*\"/version = \"${DEV_VERSION}\"/" pyproject.toml

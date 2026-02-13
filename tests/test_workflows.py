@@ -74,15 +74,10 @@ class TestCIWorkflow:
 class TestPublishWorkflow:
     """Validate Publish workflow triggers, actions, and steps."""
 
-    def test_triggers_on_tag_push(self):
-        wf = _load_workflow("publish.yml")
-        triggers = wf[True]
-        assert "push" in triggers
-        assert "v*" in triggers["push"]["tags"]
-
     def test_triggers_on_release_published(self):
         wf = _load_workflow("publish.yml")
         triggers = wf[True]
+        assert "release" in triggers
         assert "published" in triggers["release"]["types"]
 
     def test_triggers_on_pull_request(self):
