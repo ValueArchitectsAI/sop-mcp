@@ -217,6 +217,68 @@ uvx sop-mcp                # run via uvx (once published)
 
 8. **RFC 2119** — Industry standard for requirement levels. MUST/SHOULD/MAY give agents clear priority signals.
 
+## Commit Messages
+
+All commits MUST follow [Conventional Commits](https://www.conventionalcommits.org/). This is not optional — Release Please reads these to determine version bumps and generate changelogs.
+
+Format:
+```
+<type>[optional scope]: <description>
+
+[optional body]
+```
+
+Types and their effect on versioning:
+
+| Type | Version Bump | When to use |
+|------|-------------|-------------|
+| `feat` | minor | New feature or capability |
+| `fix` | patch | Bug fix |
+| `feat!` or `BREAKING CHANGE:` in body | major | Breaking change |
+| `docs` | none | Documentation only |
+| `style` | none | Formatting, no logic change |
+| `refactor` | none | Code change, no new feature or fix |
+| `perf` | patch | Performance improvement |
+| `test` | none | Adding or fixing tests |
+| `chore` | none | Build process, tooling |
+| `ci` | none | CI/CD changes |
+
+Rules:
+- Use imperative mood: "add" not "added" or "adds"
+- No period at end of subject line
+- Keep subject under 50 characters
+- Capitalize the subject line
+- Use body to explain what and why, not how
+
+Examples:
+```
+feat: add SOP export tool
+fix: handle missing version field in parser
+feat!: rename all tool prefixes from exec_ to run_
+docs: update AGENT.md with commit conventions
+ci: add Python 3.10 to test matrix
+refactor(parser): simplify step extraction regex
+```
+
+## Release Flow
+
+Releases are fully automated via [Release Please](https://github.com/googleapis/release-please).
+
+1. You merge commits to `main` (via PR from `dev`)
+2. Release Please reads the commit messages and opens/updates a "Release PR"
+   - Bumps version in `pyproject.toml`
+   - Generates/updates `CHANGELOG.md`
+   - Title: `chore(main): release X.Y.Z`
+3. When you're ready to release, merge that Release PR
+4. Release Please creates a GitHub Release + git tag
+5. The `publish.yml` workflow triggers → publishes to PyPI
+
+You never manually edit the version or write release notes. Just write good commit messages.
+
+### TestPyPI dev builds
+
+On every PR to `main` (from within the repo), a dev build is published to TestPyPI with a version like `0.2.0.dev118498230` (commit SHA as decimal). This lets you test the package before merging.
+
 ## Common Patterns When Modifying This Project
 
 **Adding a new tool**: Define it in `server.py` with `@mcp.tool()`. Use the `backend` module-level instance for storage operations.
