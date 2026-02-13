@@ -4,6 +4,8 @@ This module contains the MCP server with dynamically registered SOP tools
 using FastMCP (high-level MCP SDK API).
 """
 
+from __future__ import annotations
+
 import logging
 from datetime import datetime, timezone
 from typing import Any

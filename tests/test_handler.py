@@ -5,6 +5,8 @@ Tests the server.py implementation including:
 - SOP tool functionality (start, continue, and version selection)
 """
 
+from __future__ import annotations
+
 import json
 
 import pytest
