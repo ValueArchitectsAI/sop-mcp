@@ -30,9 +30,22 @@ EPHEMERAL_WARNING = (
 )
 
 
-def _build_step_instruction(step_content: str, current_step: int, total_steps: int, is_complete: bool) -> str:
+def _build_step_instruction(
+    step_content: str,
+    current_step: int,
+    total_steps: int,
+    is_complete: bool,
+    sop: SOP | None = None,
+) -> str:
     """Build an explicit instruction that tells the LLM to execute the step."""
-    instruction = (
+    # Prepend SOP overview header on the first step
+    overview_header = ""
+    if current_step == 1 and sop is not None:
+        overview_header = (
+            f"You are executing: {sop.title}\nTotal steps: {total_steps}\nOverview: {sop.overview}\n\n---\n\n"
+        )
+
+    instruction = overview_header + (
         f"You are now executing Step {current_step} of {total_steps}. "
         "You MUST perform ALL actions described below. Do NOT just summarize or describe them — "
         "actually carry them out using your available tools (file operations, shell commands, code generation, etc.). "
@@ -51,18 +64,45 @@ def _build_step_instruction(step_content: str, current_step: int, total_steps: i
             f"After completing ALL actions in this step, call this tool again with current_step={current_step} "
             "to advance to the next step. Do NOT skip ahead.\n\n"
         )
+
+    # Append execution instruction for non-final steps
+    if not is_complete and current_step < total_steps:
+        instruction += (
+            "\n---\n"
+            "EXECUTION INSTRUCTION: Generate the concrete output described above using realistic\n"
+            f"data. Then call this tool with completed_step_id={current_step} and include your\n"
+            "complete output in the step_output field. Your step_output MUST contain specific\n"
+            "values, not just field names or summaries.\n"
+        )
+    elif is_complete:
+        instruction += (
+            "\n---\n"
+            "EXECUTION INSTRUCTION: This is the LAST step of the SOP. Generate the concrete output\n"
+            "described above using realistic data. Then call this tool with "
+            f"completed_step_id={current_step}\n"
+            "and include your complete output in the step_output field. Your step_output MUST\n"
+            "contain specific values, not just field names or summaries.\n"
+        )
+
     return instruction
 
 
 def _create_sop_handler(sop_name: str):
     """Create a handler function for an SOP tool that supports an optional version parameter."""
 
-    def handler(current_step: int | None = None, version: str | None = None) -> dict[str, Any]:
+    def handler(
+        current_step: int | None = None,
+        version: str | None = None,
+        step_output: str | None = None,
+    ) -> dict[str, Any]:
         """Execute an SOP step by step.
 
         Args:
             current_step: The step to advance from. Omit to start from the beginning.
             version: Optional semantic version (e.g. "1.0", "2.1.0"). Defaults to latest.
+            step_output: The concrete output you produced for the completed
+                step. Include all specific values, names, dates, and details
+                as specified in the step's Expected Output section.
         """
         tool_name = f"run_{sop_name}"
         logger.info("Invoking %s with args: current_step=%s, version=%s", tool_name, current_step, version)
@@ -90,7 +130,7 @@ def _create_sop_handler(sop_name: str):
                 "sop_version": sop.version,
                 "title": sop.title,
                 "overview": sop.overview,
-                "instruction": _build_step_instruction(sop.steps[0], 1, sop.total_steps, is_complete),
+                "instruction": _build_step_instruction(sop.steps[0], 1, sop.total_steps, is_complete, sop=sop),
                 "current_step": 1,
                 "total_steps": sop.total_steps,
                 "step_content": sop.steps[0],
@@ -108,12 +148,17 @@ def _create_sop_handler(sop_name: str):
         # Check if already complete
         if current_step == sop.total_steps:
             logger.info("%s completed successfully", tool_name)
+            completion_signal = (
+                "All steps complete. Now produce your FINAL COMPREHENSIVE DOCUMENT.\n\n"
+                "Review the step_output you submitted for each step in this conversation.\n"
+                "Compile them into a single detailed document that includes ALL concrete values,\n"
+                "names, dates, numbers, and specifics from every step. Do not summarize — include\n"
+                "the full detail from each step's output."
+            )
             return {
                 "sop_name": sop.name,
                 "sop_version": sop.version,
-                "instruction": _build_step_instruction(
-                    sop.steps[current_step - 1], current_step, sop.total_steps, True
-                ),
+                "instruction": completion_signal,
                 "current_step": current_step,
                 "total_steps": sop.total_steps,
                 "step_content": sop.steps[current_step - 1],
@@ -128,7 +173,13 @@ def _create_sop_handler(sop_name: str):
         return {
             "sop_name": sop.name,
             "sop_version": sop.version,
-            "instruction": _build_step_instruction(sop.steps[next_step - 1], next_step, sop.total_steps, is_complete),
+            "instruction": _build_step_instruction(
+                sop.steps[next_step - 1],
+                next_step,
+                sop.total_steps,
+                is_complete,
+                sop=sop,
+            ),
             "current_step": next_step,
             "total_steps": sop.total_steps,
             "step_content": sop.steps[next_step - 1],
