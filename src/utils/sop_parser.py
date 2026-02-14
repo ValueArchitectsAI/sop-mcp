@@ -64,6 +64,8 @@ class SOP:
         self.steps: list[str] = parsed["steps"]
         self.version: str = parsed["version"]
         self.tool_name: str = _name_to_tool_name(self.name)
+        self.prerequisites: str = parsed.get("prerequisites", "")
+        self.mcp_server_prerequisites: list[str] = parsed.get("mcp_server_prerequisites", [])
 
     @classmethod
     def from_content(cls, content: str) -> "SOP":
@@ -93,6 +95,8 @@ class SOP:
         instance.steps = parsed["steps"]
         instance.version = parsed["version"]
         instance.tool_name = _name_to_tool_name(instance.name)
+        instance.prerequisites = parsed.get("prerequisites", "")
+        instance.mcp_server_prerequisites = parsed.get("mcp_server_prerequisites", [])
         return instance
 
     @property
@@ -159,7 +163,16 @@ def _parse_content(content: str) -> dict[str, Any]:
     overview = _extract_overview(content)
     steps = _extract_steps(content)
     version = _extract_version(content)
-    return {"title": title, "overview": overview, "steps": steps, "version": version}
+    prerequisites = _extract_prerequisites(content)
+    mcp_server_prerequisites = _extract_mcp_server_prerequisites(content)
+    return {
+        "title": title,
+        "overview": overview,
+        "steps": steps,
+        "version": version,
+        "prerequisites": prerequisites,
+        "mcp_server_prerequisites": mcp_server_prerequisites,
+    }
 
 
 def _extract_title(content: str) -> str:
@@ -204,6 +217,65 @@ def _extract_version(content: str) -> str:
     if match:
         return match.group(1)
     return "1.0.0"
+
+
+def _extract_prerequisites(content: str) -> str:
+    """Extract the raw text of the ## Prerequisites section.
+
+    Returns the section body (everything between ``## Prerequisites`` and the
+    next ``##`` heading or end-of-document).  Returns an empty string when the
+    section is not present.
+    """
+    pattern = r"^##\s+Prerequisites\s*\n(.*?)(?=^##\s|\Z)"
+    match = re.search(pattern, content, re.MULTILINE | re.DOTALL)
+    if not match:
+        return ""
+    return match.group(1).strip()
+
+
+def _extract_mcp_server_prerequisites(content: str) -> list[str]:
+    """Extract MCP server names from the **Required MCP Servers** field.
+
+    Recognised label formats::
+
+        **Required MCP Servers** (should):
+        **Required MCP Servers**:
+
+    Each bulleted list item (``- name``) following the label is collected.
+    Descriptions after `` — ``, `` – ``, or `` - `` separators are stripped.
+    Empty or whitespace-only items are skipped.  Collection stops at the next
+    non-list-item line (blank lines are tolerated between items).
+
+    Returns an empty list when the field is not found.
+    """
+    # Match the label line — optional "(should)" and colon
+    label_pattern = r"\*\*Required MCP Servers\*\*(?:\s*\(should\))?\s*:"
+    label_match = re.search(label_pattern, content)
+    if not label_match:
+        return []
+
+    # Grab everything after the label until end-of-string
+    rest = content[label_match.end() :]
+
+    servers: list[str] = []
+    for line in rest.split("\n"):
+        stripped = line.strip()
+        # Skip blank lines between items
+        if not stripped:
+            continue
+        # A bare dash (possibly with trailing whitespace) is an empty list item — skip it
+        if stripped == "-":
+            continue
+        # Stop when we hit a non-list-item line
+        if not stripped.startswith("- "):
+            break
+        item = stripped[2:].strip()
+        # Strip description after separator: " — ", " – ", or " - "
+        item = re.split(r"\s(?:—|–|-)\s", item, maxsplit=1)[0].strip()
+        if item:
+            servers.append(item)
+
+    return servers
 
 
 def _resolve_latest_path(sop_dir: Path) -> Path:

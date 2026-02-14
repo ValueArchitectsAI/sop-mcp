@@ -120,6 +120,13 @@ Required elements for a valid SOP:
 ## Overview                                ← required section
 Description of what this SOP does.
 
+## Prerequisites                           ← optional section
+- Any general prerequisites...
+
+**Required MCP Servers** (should):         ← SHOULD-level field
+- server_name
+- another_server — optional description
+
 ### Step 1: First Step Title               ← at least one step required
 Step content with RFC 2119 keywords...
 
@@ -128,6 +135,8 @@ More content...
 ```
 
 Each step SHOULD include a `**Time Estimate:**` field.
+
+The `## Prerequisites` section SHOULD include a `**Required MCP Servers**` field listing MCP servers needed for execution.
 
 RFC 2119 keywords define requirement levels within steps.
 
@@ -148,6 +157,7 @@ Guidelines:
 - Do not use MUST to impose a particular method where not required for interoperability
 - Consider security implications when not following MUST/SHOULD requirements
 - Each step SHOULD include a `**Time Estimate:**` field with expected duration in minutes
+- The `## Prerequisites` section SHOULD include a `**Required MCP Servers**` field listing required MCP servers
 
 Reference: [RFC 2119](https://datatracker.ietf.org/doc/html/rfc2119)
 
