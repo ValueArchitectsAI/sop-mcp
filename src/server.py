@@ -7,6 +7,7 @@ using FastMCP (high-level MCP SDK API).
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -84,7 +85,7 @@ def _create_sop_handler(sop_name: str):
         if current_step is None:
             is_complete = sop.total_steps == 1
             logger.info("%s completed successfully", tool_name)
-            return {
+            response = {
                 "sop_name": sop.name,
                 "sop_version": sop.version,
                 "title": sop.title,
@@ -95,6 +96,9 @@ def _create_sop_handler(sop_name: str):
                 "step_content": sop.steps[0],
                 "is_complete": is_complete,
             }
+            if sop.mcp_server_prerequisites:
+                response["required_mcp_servers"] = sop.mcp_server_prerequisites
+            return response
 
         # Validate step number
         if current_step < 1 or current_step > sop.total_steps:
@@ -221,6 +225,15 @@ def publish_sop(content: str, change_type: str = "minor") -> dict[str, Any]:
             f"Steps {', '.join(str(s) for s in steps_missing_time)} are missing a "
             "**Time Estimate:** field. Each step SHOULD include an estimated duration in minutes."
         )
+    # Check for missing MCP server prerequisites (SHOULD-level)
+    if not sop.mcp_server_prerequisites:
+        tool_pattern = re.compile(r"`\w+`\s+tool|call\s+the\s+`?\w+`?\s+tool", re.IGNORECASE)
+        if tool_pattern.search("\n".join(sop.steps)):
+            warnings.append(
+                "SOP steps reference MCP tools but no **Required MCP Servers** "
+                "field was found in the Prerequisites section. Each SOP SHOULD "
+                "declare required MCP servers."
+            )
     if warnings:
         result["warning"] = " | ".join(warnings)
     return result
@@ -317,8 +330,7 @@ def explain_sop(sop_name: str | None = None) -> dict[str, Any]:
 
     step_outline = [step.splitlines()[0].replace("### ", "") for step in sop.steps]
 
-    logger.info("explain_sop completed successfully")
-    return {
+    result = {
         "sop_name": sop.name,
         "title": sop.title,
         "version": sop.version,
@@ -326,6 +338,11 @@ def explain_sop(sop_name: str | None = None) -> dict[str, Any]:
         "total_steps": sop.total_steps,
         "steps": step_outline,
     }
+    if sop.prerequisites:
+        result["prerequisites"] = sop.prerequisites
+
+    logger.info("explain_sop completed successfully")
+    return result
 
 
 # --- Dynamic SOP tool registration ---

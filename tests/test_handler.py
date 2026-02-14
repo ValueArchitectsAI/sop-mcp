@@ -8,10 +8,15 @@ Tests the server.py implementation including:
 from __future__ import annotations
 
 import json
+import shutil
+import string
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from src.server import mcp
+from src.utils.storage_local import BUNDLED_SOPS_DIR
 
 
 async def call_tool(name: str, arguments: dict | None = None) -> dict:
@@ -171,3 +176,80 @@ class TestSopToolVersionParameter:
         result = await call_tool("run_sop_creation_guide", {"version": "1.0", "current_step": 1})
         assert result["sop_version"] == "1.0"
         assert result["current_step"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Property-based tests (Hypothesis)
+# ---------------------------------------------------------------------------
+
+# --- Strategies ---
+
+# Segment for SOP Document IDs: lowercase alpha start, then lowercase alphanumeric
+_id_segment = st.text(
+    alphabet=string.ascii_lowercase + string.digits,
+    min_size=1,
+    max_size=8,
+).filter(lambda s: s[0].isalpha())
+
+# Document ID: at least 3 underscore-separated segments (matches [a-z][a-z0-9]*(?:_[a-z0-9]+){2,})
+sop_doc_id = st.tuples(
+    _id_segment,
+    _id_segment,
+    _id_segment,
+    st.lists(_id_segment, min_size=0, max_size=2),
+).map(lambda t: "_".join([t[0], t[1], t[2]] + t[3]))
+
+# Random tool names for step content
+_tool_name = st.text(
+    alphabet=string.ascii_lowercase + "_",
+    min_size=2,
+    max_size=15,
+).filter(lambda s: s[0].isalpha() and not s.endswith("_"))
+
+
+def _build_sop_with_tool_refs_no_prereqs(doc_id: str, tool_name: str) -> str:
+    """Build valid SOP content with a tool reference in a step but NO Required MCP Servers field."""
+    return (
+        "# Test SOP With Tool Refs\n\n"
+        "## Document Information\n"
+        f"- **Document ID**: {doc_id}\n\n"
+        "## Overview\n\nThis SOP tests tool reference detection.\n\n"
+        f"### Step 1: Use the tool\n\n"
+        f"Use the `{tool_name}` tool to perform the action.\n"
+    )
+
+
+# Feature: sop-prerequisites-mcp-servers, Property 2: Missing MCP Server Prerequisites Produces Warning
+# Validates: Requirements 2.1, 2.3
+@settings(max_examples=100, deadline=None)
+@given(
+    doc_id=sop_doc_id,
+    tool_name=_tool_name,
+)
+@pytest.mark.asyncio
+async def test_property_missing_mcp_server_prerequisites_produces_warning(
+    doc_id: str,
+    tool_name: str,
+) -> None:
+    """For any valid SOP content that contains tool-referencing patterns in its
+    steps but does not contain a **Required MCP Servers** field, publishing via
+    publish_sop should return success: True with a warning mentioning
+    'Required MCP Servers'.
+
+    **Validates: Requirements 2.1, 2.3**
+    """
+    content = _build_sop_with_tool_refs_no_prereqs(doc_id, tool_name)
+    sop_dir = BUNDLED_SOPS_DIR / doc_id
+    try:
+        result = await call_tool("publish_sop", {"content": content})
+        # SHOULD-level: publish succeeds (Req 2.3)
+        assert result.get("success") is True, f"Expected success=True, got {result}"
+        # Warning about missing MCP server prerequisites is present (Req 2.1)
+        warning = result.get("warning", "")
+        assert "Required MCP Servers" in warning, (
+            f"Expected warning mentioning 'Required MCP Servers', got: {warning!r}"
+        )
+    finally:
+        # Clean up the created SOP files
+        if sop_dir.exists():
+            shutil.rmtree(sop_dir)
