@@ -27,6 +27,12 @@ async def call_tool(name: str, arguments: dict | None = None) -> dict:
     return json.loads(result[0].text)
 
 
+async def get_sop_info(tool_name: str) -> dict:
+    """Helper: get SOP metadata (total_steps, title, overview) via explain_sop."""
+    sop_name = tool_name.removeprefix("run_")
+    return await call_tool("explain_sop", {"sop_name": sop_name})
+
+
 class TestDynamicToolRegistration:
     """Tests for dynamic SOP tool registration."""
 
@@ -74,74 +80,33 @@ class TestSopToolStart:
         assert isinstance(result["sop_version"], str)
 
     @pytest.mark.asyncio
-    async def test_returns_title(self):
+    async def test_returns_instruction(self):
         result = await call_tool("run_sop_creation_guide")
-        assert "title" in result
-        assert isinstance(result["title"], str)
-
-    @pytest.mark.asyncio
-    async def test_returns_overview(self):
-        result = await call_tool("run_sop_creation_guide")
-        assert "overview" in result
-        assert isinstance(result["overview"], str)
-
-    @pytest.mark.asyncio
-    async def test_returns_current_step_as_one(self):
-        result = await call_tool("run_sop_creation_guide")
-        assert result["current_step"] == 1
-
-    @pytest.mark.asyncio
-    async def test_returns_total_steps(self):
-        result = await call_tool("run_sop_creation_guide")
-        assert "total_steps" in result
-        assert isinstance(result["total_steps"], int)
-        assert result["total_steps"] > 0
-
-    @pytest.mark.asyncio
-    async def test_returns_step_content(self):
-        result = await call_tool("run_sop_creation_guide")
-        assert "step_content" in result
-        assert isinstance(result["step_content"], str)
+        assert "instruction" in result
+        assert isinstance(result["instruction"], str)
+        assert len(result["instruction"]) > 0
 
 
 class TestSopToolContinue:
     """Tests for continuing an SOP (current_step provided)."""
 
     @pytest.mark.asyncio
-    async def test_returns_next_step_number(self):
+    async def test_returns_instruction_for_next_step(self):
         result = await call_tool("run_sop_creation_guide", {"current_step": 1})
-        assert result["current_step"] == 2
+        assert "instruction" in result
+        assert "Step 2" in result["instruction"]
 
     @pytest.mark.asyncio
-    async def test_returns_step_content(self):
-        result = await call_tool("run_sop_creation_guide", {"current_step": 1})
-        assert "step_content" in result
-        assert isinstance(result["step_content"], str)
-
-    @pytest.mark.asyncio
-    async def test_returns_is_complete_false_for_mid_steps(self):
-        result = await call_tool("run_sop_creation_guide", {"current_step": 1})
-        assert result["is_complete"] is False
-
-    @pytest.mark.asyncio
-    async def test_returns_is_complete_true_for_last_step(self):
-        start = await call_tool("run_sop_creation_guide")
-        total = start["total_steps"]
+    async def test_returns_completion_signal_on_last_step(self):
+        info = await get_sop_info("run_sop_creation_guide")
+        total = info["total_steps"]
         result = await call_tool("run_sop_creation_guide", {"current_step": total})
-        assert result["is_complete"] is True
-
-    @pytest.mark.asyncio
-    async def test_returns_completion_message_on_last_step(self):
-        start = await call_tool("run_sop_creation_guide")
-        total = start["total_steps"]
-        result = await call_tool("run_sop_creation_guide", {"current_step": total})
-        assert "message" in result
-        assert "completed" in result["message"].lower()
+        assert "All steps complete" in result["instruction"]
 
     @pytest.mark.asyncio
     async def test_error_for_step_beyond_total(self):
-        start = await call_tool("run_sop_creation_guide")
-        total = start["total_steps"]
+        info = await get_sop_info("run_sop_creation_guide")
+        total = info["total_steps"]
         result = await call_tool("run_sop_creation_guide", {"current_step": total + 1})
         assert "error" in result
 
@@ -175,7 +140,7 @@ class TestSopToolVersionParameter:
     async def test_version_with_step_navigation(self):
         result = await call_tool("run_sop_creation_guide", {"version": "1.0", "current_step": 1})
         assert result["sop_version"] == "1.0"
-        assert result["current_step"] == 2
+        assert "Step 2" in result["instruction"]
 
 
 # ---------------------------------------------------------------------------
@@ -277,16 +242,15 @@ async def test_property_completion_signal_contains_compilation_instructions(
     tool_name = data.draw(st.sampled_from(sop_tools))
 
     # Get total steps for this SOP
-    start_result = await call_tool(tool_name)
-    assert "error" not in start_result, f"Unexpected error starting {tool_name}: {start_result}"
-    total_steps = start_result["total_steps"]
+    info = await get_sop_info(tool_name)
+    assert "error" not in info, f"Unexpected error getting info for {tool_name}: {info}"
+    total_steps = info["total_steps"]
 
     # Call with current_step=total_steps to trigger completion signal
     step_output_value = data.draw(st.text(min_size=0, max_size=50))
     result = await call_tool(tool_name, {"current_step": total_steps, "step_output": step_output_value})
 
     assert "error" not in result, f"Unexpected error: {result}"
-    assert result["is_complete"] is True
 
     instruction = result["instruction"]
 
@@ -374,9 +338,9 @@ async def test_property_non_final_steps_contain_execution_instruction_with_corre
     tool_name = data.draw(st.sampled_from(sop_tools))
 
     # Get total steps for this SOP
-    start_result = await call_tool(tool_name)
-    assert "error" not in start_result, f"Unexpected error starting {tool_name}: {start_result}"
-    total_steps = start_result["total_steps"]
+    info = await get_sop_info(tool_name)
+    assert "error" not in info, f"Unexpected error getting info for {tool_name}: {info}"
+    total_steps = info["total_steps"]
 
     # Only test SOPs with more than 1 step (need at least one non-final step)
     if total_steps <= 1:
@@ -392,9 +356,9 @@ async def test_property_non_final_steps_contain_execution_instruction_with_corre
         result = await call_tool(tool_name, {"current_step": step_k - 1})
 
     assert "error" not in result, f"Unexpected error for step {step_k}: {result}"
-    assert result["current_step"] == step_k
 
     instruction = result["instruction"]
+    assert f"Step {step_k}" in instruction, f"Step {step_k}/{total_steps} instruction should reference Step {step_k}"
 
     # Req 2.1: non-final step instruction contains an execution instruction block
     assert "EXECUTION INSTRUCTION" in instruction, (
@@ -455,9 +419,9 @@ async def test_property_execution_instruction_is_sop_agnostic(
     candidates: list[tuple[str, int]] = []
 
     tool_name_1 = data.draw(st.sampled_from(sop_tools))
-    start_1 = await call_tool(tool_name_1)
-    assert "error" not in start_1, f"Unexpected error starting {tool_name_1}: {start_1}"
-    total_1 = start_1["total_steps"]
+    info_1 = await get_sop_info(tool_name_1)
+    assert "error" not in info_1, f"Unexpected error getting info for {tool_name_1}: {info_1}"
+    total_1 = info_1["total_steps"]
 
     if total_1 <= 1:
         # Single-step SOP has no non-final steps; skip
@@ -470,9 +434,9 @@ async def test_property_execution_instruction_is_sop_agnostic(
     other_sop_tools = [t for t in sop_tools if t != tool_name_1]
     if other_sop_tools:
         tool_name_2 = data.draw(st.sampled_from(other_sop_tools))
-        start_2 = await call_tool(tool_name_2)
-        assert "error" not in start_2, f"Unexpected error starting {tool_name_2}: {start_2}"
-        total_2 = start_2["total_steps"]
+        info_2 = await get_sop_info(tool_name_2)
+        assert "error" not in info_2, f"Unexpected error getting info for {tool_name_2}: {info_2}"
+        total_2 = info_2["total_steps"]
         if total_2 > 1:
             step_k2 = data.draw(st.integers(min_value=1, max_value=total_2 - 1))
             candidates.append((tool_name_2, step_k2))
@@ -534,19 +498,18 @@ async def test_property_final_step_instruction_indicates_last_step(
     tool_name = data.draw(st.sampled_from(sop_tools))
 
     # Get total steps for this SOP
-    start_result = await call_tool(tool_name)
-    assert "error" not in start_result, f"Unexpected error starting {tool_name}: {start_result}"
-    total_steps = start_result["total_steps"]
+    info = await get_sop_info(tool_name)
+    assert "error" not in info, f"Unexpected error getting info for {tool_name}: {info}"
+    total_steps = info["total_steps"]
 
     # Request the final step: current_step = total_steps - 1 advances to the last step
     if total_steps == 1:
         # Single-step SOP: the first (and only) step is the final step
-        final_result = start_result
+        final_result = await call_tool(tool_name)
     else:
         final_result = await call_tool(tool_name, {"current_step": total_steps - 1})
 
     assert "error" not in final_result, f"Unexpected error: {final_result}"
-    assert final_result["current_step"] == total_steps
 
     final_instruction = final_result["instruction"]
 
@@ -564,7 +527,7 @@ async def test_property_final_step_instruction_indicates_last_step(
     # For multi-step SOPs, verify the "last step" indicator is distinct from non-final steps
     if total_steps > 1:
         # Get a non-final step for comparison
-        non_final_result = start_result  # step 1 is always non-final in multi-step SOPs
+        non_final_result = await call_tool(tool_name)
         non_final_instruction = non_final_result["instruction"]
 
         # Extract execution instruction portions (after the last --- separator)
@@ -610,9 +573,12 @@ async def test_property_first_step_contains_sop_overview_header(
     assert "error" not in result, f"Unexpected error starting {tool_name}: {result}"
 
     instruction = result["instruction"]
-    title = result["title"]
-    total_steps = result["total_steps"]
-    overview = result["overview"]
+
+    # Get SOP metadata via explain_sop
+    info = await get_sop_info(tool_name)
+    title = info["title"]
+    total_steps = info["total_steps"]
+    overview = info["overview"]
 
     # Req 4.1: first step includes SOP overview header before step content
     assert "You are executing:" in instruction, (

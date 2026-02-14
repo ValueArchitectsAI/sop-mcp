@@ -143,37 +143,37 @@ class TestSopWorkflowRunThrough:
 
     async def test_full_walkthrough(self, session):
         """Start the authoring SOP, step through every step, and verify completion."""
-        # Start (returns step 1)
-        data = await _call(session, "run_sop_creation_guide")
-        assert data["current_step"] == 1
-        assert "step_content" in data
-        total = data["total_steps"]
+        # Get total steps via explain_sop
+        info = await _call(session, "explain_sop", {"sop_name": "sop_creation_guide"})
+        total = info["total_steps"]
         assert total > 1, "SOP should have multiple steps"
+
+        # Start (returns step 1 instruction)
+        data = await _call(session, "run_sop_creation_guide")
+        assert "instruction" in data
+        assert "Step 1" in data["instruction"]
 
         # Walk through remaining steps
         for step in range(1, total):
             data = await _call(session, "run_sop_creation_guide", {"current_step": step})
-            assert data["current_step"] == step + 1
-            assert "step_content" in data
+            assert "instruction" in data
 
-            if step + 1 < total:
-                assert data["is_complete"] is False
-
-        # Final step should be marked complete
-        assert data["is_complete"] is True
-        assert "message" in data
-        assert "completed" in data["message"].lower()
+        # Final call triggers completion signal
+        data = await _call(session, "run_sop_creation_guide", {"current_step": total})
+        assert "All steps complete" in data["instruction"]
 
     async def test_walkthrough_with_explicit_version(self, session):
         """Run through the SOP while pinning a specific version."""
         data = await _call(session, "run_sop_creation_guide", {"version": "1.0"})
         assert data["sop_version"] == "1.0"
-        assert data["current_step"] == 1
+        assert "instruction" in data
 
-        total = data["total_steps"]
+        # Get total steps via explain_sop
+        info = await _call(session, "explain_sop", {"sop_name": "sop_creation_guide"})
+        total = info["total_steps"]
         # Jump straight to the last step
         data = await _call(session, "run_sop_creation_guide", {"version": "1.0", "current_step": total})
-        assert data["is_complete"] is True
+        assert "All steps complete" in data["instruction"]
         assert data["sop_version"] == "1.0"
 
     async def test_invalid_step_returns_error(self, session):
@@ -181,8 +181,8 @@ class TestSopWorkflowRunThrough:
         assert "error" in data
 
     async def test_step_beyond_total_returns_error(self, session):
-        start = await _call(session, "run_sop_creation_guide")
-        total = start["total_steps"]
+        info = await _call(session, "explain_sop", {"sop_name": "sop_creation_guide"})
+        total = info["total_steps"]
         data = await _call(session, "run_sop_creation_guide", {"current_step": total + 1})
         assert "error" in data
 
