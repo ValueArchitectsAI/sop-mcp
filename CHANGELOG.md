@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.3.0...v0.4.0) (2026-02-14)
+
+
+### Features
+
+* Add MCP server prerequisites support to SOP system ([#11](https://github.com/ValueArchitectsAI/sop-mcp/issues/11)) ([d99ae9f](https://github.com/ValueArchitectsAI/sop-mcp/commit/d99ae9f5579b86464ee06e6bfcae57efdada3922))
+
+
+### Bug Fixes
+
+* Set dependabot package-ecosystem to uv and github-actions ([6a768da](https://github.com/ValueArchitectsAI/sop-mcp/commit/6a768da47a227619c19e1af31de794077b5c2f25))
+
 ## [0.3.0](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.2.0...v0.3.0) (2026-02-13)
 
 
