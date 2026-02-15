@@ -65,6 +65,12 @@ The built-in `run_sop_creation_guide` tool walks agents through the full authori
 
 After publishing, restart the server to register the new `run_<sop_name>` tool.
 
+## The `step_output` Field
+
+Every `run_sop_*` tool accepts an optional `step_output` string parameter. This is where the LLM submits its concrete work product for the completed step — specific values, names, dates, and details rather than summaries.
+
+The server accepts `step_output` but does not store or process it. The field exists purely to force the LLM to produce detailed output that lands in the conversation's tool-call history. When all steps are complete, the LLM can reference its own `step_output` submissions to compile a comprehensive final document. State lives entirely in the LLM's conversation context, keeping the server stateless.
+
 ## Storage Configuration
 
 By default, SOPs are stored in the bundled `src/sops/` directory (ephemeral — data may be lost if the package cache refreshes).
