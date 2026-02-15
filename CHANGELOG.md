@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.4.0...v0.5.0) (2026-02-15)
+
+
+### Features
+
+* Improve LLM output quality and slim handler response ([#16](https://github.com/ValueArchitectsAI/sop-mcp/issues/16)) ([03621b4](https://github.com/ValueArchitectsAI/sop-mcp/commit/03621b4baff197bfdd515181d5ad0f476567b558))
+
 ## [0.4.0](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.3.0...v0.4.0) (2026-02-14)
 
 
