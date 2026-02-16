@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.5.0...v0.6.0) (2026-02-16)
+
+
+### Features
+
+* Add optinal previous_outputs accumulation for multi-step SOP execution ([#19](https://github.com/ValueArchitectsAI/sop-mcp/issues/19)) ([eef2bd1](https://github.com/ValueArchitectsAI/sop-mcp/commit/eef2bd195e9c83266144bb438d1ee7043c8bcba5))
+
 ## [0.5.0](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.4.0...v0.5.0) (2026-02-15)
 
 
