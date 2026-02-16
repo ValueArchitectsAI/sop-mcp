@@ -15,7 +15,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from src.server import mcp
+from src.server import _merge_outputs, mcp
 from src.utils.storage_local import BUNDLED_SOPS_DIR
 
 
@@ -31,6 +31,50 @@ async def get_sop_info(tool_name: str) -> dict:
     """Helper: get SOP metadata (total_steps, title, overview) via explain_sop."""
     sop_name = tool_name.removeprefix("run_")
     return await call_tool("explain_sop", {"sop_name": sop_name})
+
+
+# ── _merge_outputs unit tests ──────────────────────────────────────────
+
+
+class TestMergeOutputs:
+    """Unit tests for the _merge_outputs pure function."""
+
+    def test_both_none_returns_empty_dict(self):
+        assert _merge_outputs(None, None, None) == {}
+
+    def test_merges_step_output_into_empty(self):
+        result = _merge_outputs(None, 1, "output for step 1")
+        assert result == {"1": "output for step 1"}
+
+    def test_merges_step_output_into_existing(self):
+        prev = {"1": "first"}
+        result = _merge_outputs(prev, 2, "second")
+        assert result == {"1": "first", "2": "second"}
+
+    def test_overwrites_existing_key(self):
+        prev = {"1": "old"}
+        result = _merge_outputs(prev, 1, "new")
+        assert result == {"1": "new"}
+
+    def test_no_step_output_passes_through(self):
+        prev = {"1": "first"}
+        result = _merge_outputs(prev, 2, None)
+        assert result == {"1": "first"}
+
+    def test_no_current_step_passes_through(self):
+        prev = {"1": "first"}
+        result = _merge_outputs(prev, None, "ignored")
+        assert result == {"1": "first"}
+
+    def test_does_not_mutate_input(self):
+        prev = {"1": "first"}
+        result = _merge_outputs(prev, 2, "second")
+        assert prev == {"1": "first"}
+        assert result == {"1": "first", "2": "second"}
+
+    def test_empty_dict_input(self):
+        result = _merge_outputs({}, 1, "output")
+        assert result == {"1": "output"}
 
 
 class TestDynamicToolRegistration:
@@ -313,6 +357,53 @@ async def test_property_step_output_is_optional_schema_parameter(
     # Req 1.3: step_output is NOT in the required array
     required = schema.get("required", [])
     assert "step_output" not in required, f"Tool '{tool.name}' schema has 'step_output' in required array: {required}"
+
+
+# Feature: stateless-previous-outputs, Property 1: Schema includes optional previous_outputs of type object
+# Validates: Requirements 1.1, 1.2, 1.3
+@settings(max_examples=100, deadline=None)
+@given(data=st.data())
+@pytest.mark.asyncio
+async def test_property_schema_includes_optional_previous_outputs_of_type_object(
+    data: st.DataObject,
+) -> None:
+    """For any registered SOP tool (run_sop_*), the tool's input schema SHALL
+    include a `previous_outputs` property of type object, and `previous_outputs`
+    SHALL NOT appear in the schema's required array.
+
+    **Validates: Requirements 1.1, 1.2, 1.3**
+    """
+    # Discover all registered SOP tools
+    tools = await mcp.list_tools()
+    sop_tools = [t for t in tools if t.name.startswith("run_sop_")]
+    assert len(sop_tools) > 0, "No SOP tools registered"
+
+    tool = data.draw(st.sampled_from(sop_tools))
+    schema = tool.inputSchema
+
+    # Req 1.1: schema includes a previous_outputs property of type object
+    properties = schema.get("properties", {})
+    assert "previous_outputs" in properties, (
+        f"Tool '{tool.name}' schema is missing 'previous_outputs' property. Properties: {list(properties.keys())}"
+    )
+
+    prev_outputs_prop = properties["previous_outputs"]
+    # FastMCP may represent `dict | None` as anyOf: [{type: object}, {type: null}]
+    allowed_types = set()
+    if "type" in prev_outputs_prop:
+        allowed_types.add(prev_outputs_prop["type"])
+    for variant in prev_outputs_prop.get("anyOf", []):
+        if "type" in variant:
+            allowed_types.add(variant["type"])
+    assert "object" in allowed_types, (
+        f"Tool '{tool.name}' previous_outputs must accept type object, got types: {allowed_types}"
+    )
+
+    # Req 1.3: previous_outputs is NOT in the required array
+    required = schema.get("required", [])
+    assert "previous_outputs" not in required, (
+        f"Tool '{tool.name}' schema has 'previous_outputs' in required array: {required}"
+    )
 
 
 # Feature: sop-mcp-llm-output-quality, Property 3:
@@ -606,3 +697,300 @@ async def test_property_first_step_contains_sop_overview_header(
     # Find the first --- separator (which ends the overview header)
     first_separator = instruction.index("---", header_pos)
     assert header_pos < first_separator, f"Overview header should appear before the --- separator in {tool_name}"
+
+
+# --- Strategies for previous_outputs property tests ---
+
+# Random previous_outputs: dict mapping step number strings to arbitrary output text
+previous_outputs_strategy = st.dictionaries(
+    keys=st.integers(min_value=1, max_value=20).map(str),
+    values=st.text(min_size=1, max_size=100),
+    min_size=0,
+    max_size=10,
+)
+
+# Random step output text
+step_output_strategy = st.text(min_size=1, max_size=200)
+
+
+# Feature: stateless-previous-outputs, Property 3: Merge step_output into previous_outputs
+# Validates: Requirements 2.1, 2.3
+@settings(max_examples=100, deadline=None)
+@given(data=st.data(), previous_outputs=previous_outputs_strategy, step_output=step_output_strategy)
+@pytest.mark.asyncio
+async def test_property_merge_step_output_into_previous_outputs(
+    data: st.DataObject,
+    previous_outputs: dict[str, str],
+    step_output: str,
+) -> None:
+    """For any SOP, any valid non-final step K, any step_output string S, and
+    any previous_outputs dict P, the response's previous_outputs SHALL contain
+    the key str(K) mapped to value S, in addition to all entries from P.
+
+    **Validates: Requirements 2.1, 2.3**
+    """
+    tools = await mcp.list_tools()
+    sop_tools = [t.name for t in tools if t.name.startswith("run_sop_")]
+    assert len(sop_tools) > 0, "No SOP tools registered"
+
+    tool_name = data.draw(st.sampled_from(sop_tools))
+
+    info = await get_sop_info(tool_name)
+    assert "error" not in info, f"Unexpected error getting info for {tool_name}: {info}"
+    total_steps = info["total_steps"]
+
+    if total_steps <= 1:
+        return
+
+    # Pick a valid non-final step K (1 ≤ K < total_steps)
+    step_k = data.draw(st.integers(min_value=1, max_value=total_steps - 1))
+
+    result = await call_tool(
+        tool_name,
+        {
+            "current_step": step_k,
+            "step_output": step_output,
+            "previous_outputs": previous_outputs,
+        },
+    )
+
+    assert "error" not in result, f"Unexpected error: {result}"
+
+    resp_prev = result.get("previous_outputs", {})
+
+    # The response must contain str(K) mapped to the step_output value
+    assert str(step_k) in resp_prev, (
+        f"Response previous_outputs should contain key '{step_k}', got keys: {list(resp_prev.keys())}"
+    )
+    assert resp_prev[str(step_k)] == step_output, (
+        f"Response previous_outputs['{step_k}'] should be {step_output!r}, got {resp_prev[str(step_k)]!r}"
+    )
+
+    # All entries from P should also be present (possibly overwritten for str(K))
+    for key, value in previous_outputs.items():
+        assert key in resp_prev, (
+            f"Response previous_outputs should contain key '{key}' from input, got keys: {list(resp_prev.keys())}"
+        )
+        if key != str(step_k):
+            assert resp_prev[key] == value, (
+                f"Response previous_outputs['{key}'] should be {value!r}, got {resp_prev[key]!r}"
+            )
+
+
+# Feature: stateless-previous-outputs, Property 4: Pass-through without step_output
+# Validates: Requirements 2.2
+@settings(max_examples=100, deadline=None)
+@given(data=st.data(), previous_outputs=previous_outputs_strategy)
+@pytest.mark.asyncio
+async def test_property_pass_through_without_step_output(
+    data: st.DataObject,
+    previous_outputs: dict[str, str],
+) -> None:
+    """For any SOP, any valid non-final step K, and any previous_outputs dict P,
+    calling the handler with current_step=K and no step_output SHALL return
+    previous_outputs identical to P.
+
+    **Validates: Requirements 2.2**
+    """
+    tools = await mcp.list_tools()
+    sop_tools = [t.name for t in tools if t.name.startswith("run_sop_")]
+    assert len(sop_tools) > 0, "No SOP tools registered"
+
+    tool_name = data.draw(st.sampled_from(sop_tools))
+
+    info = await get_sop_info(tool_name)
+    assert "error" not in info, f"Unexpected error getting info for {tool_name}: {info}"
+    total_steps = info["total_steps"]
+
+    if total_steps <= 1:
+        return
+
+    step_k = data.draw(st.integers(min_value=1, max_value=total_steps - 1))
+
+    result = await call_tool(
+        tool_name,
+        {
+            "current_step": step_k,
+            "previous_outputs": previous_outputs,
+        },
+    )
+
+    assert "error" not in result, f"Unexpected error: {result}"
+
+    resp_prev = result.get("previous_outputs", {})
+
+    # When no step_output is provided, previous_outputs should pass through unchanged
+    assert resp_prev == previous_outputs, (
+        f"Without step_output, previous_outputs should be identical to input.\n"
+        f"  Input:    {previous_outputs}\n"
+        f"  Response: {resp_prev}"
+    )
+
+
+# Feature: stateless-previous-outputs, Property 5: Existing entries unchanged after merge
+# Validates: Requirements 2.4
+@settings(max_examples=100, deadline=None)
+@given(data=st.data(), previous_outputs=previous_outputs_strategy, step_output=step_output_strategy)
+@pytest.mark.asyncio
+async def test_property_existing_entries_unchanged_after_merge(
+    data: st.DataObject,
+    previous_outputs: dict[str, str],
+    step_output: str,
+) -> None:
+    """For any SOP, any valid non-final step K, any step_output string, and any
+    previous_outputs dict P, all entries in P whose keys differ from str(K)
+    SHALL appear unchanged in the response's previous_outputs.
+
+    **Validates: Requirements 2.4**
+    """
+    tools = await mcp.list_tools()
+    sop_tools = [t.name for t in tools if t.name.startswith("run_sop_")]
+    assert len(sop_tools) > 0, "No SOP tools registered"
+
+    tool_name = data.draw(st.sampled_from(sop_tools))
+
+    info = await get_sop_info(tool_name)
+    assert "error" not in info, f"Unexpected error getting info for {tool_name}: {info}"
+    total_steps = info["total_steps"]
+
+    if total_steps <= 1:
+        return
+
+    step_k = data.draw(st.integers(min_value=1, max_value=total_steps - 1))
+
+    result = await call_tool(
+        tool_name,
+        {
+            "current_step": step_k,
+            "step_output": step_output,
+            "previous_outputs": previous_outputs,
+        },
+    )
+
+    assert "error" not in result, f"Unexpected error: {result}"
+
+    resp_prev = result.get("previous_outputs", {})
+
+    # All entries in P whose keys differ from str(K) must appear unchanged
+    for key, value in previous_outputs.items():
+        if key != str(step_k):
+            assert key in resp_prev, (
+                f"Key '{key}' from input previous_outputs should be in response, got keys: {list(resp_prev.keys())}"
+            )
+            assert resp_prev[key] == value, (
+                f"Entry previous_outputs['{key}'] should be unchanged.\n"
+                f"  Expected: {value!r}\n"
+                f"  Got:      {resp_prev[key]!r}"
+            )
+
+
+# Feature: stateless-previous-outputs, Property 9: Execution instructions reference previous_outputs
+# Validates: Requirements 5.1, 5.2
+@settings(max_examples=100, deadline=None)
+@given(data=st.data())
+@pytest.mark.asyncio
+async def test_property_execution_instructions_reference_previous_outputs(
+    data: st.DataObject,
+) -> None:
+    """For any SOP and any step (both final and non-final), the execution
+    instruction portion of the step instruction SHALL contain the text
+    `previous_outputs`.
+
+    **Validates: Requirements 5.1, 5.2**
+    """
+    tools = await mcp.list_tools()
+    sop_tools = [t.name for t in tools if t.name.startswith("run_sop_")]
+    assert len(sop_tools) > 0, "No SOP tools registered"
+
+    tool_name = data.draw(st.sampled_from(sop_tools))
+
+    info = await get_sop_info(tool_name)
+    assert "error" not in info, f"Unexpected error getting info for {tool_name}: {info}"
+    total_steps = info["total_steps"]
+
+    # Pick any valid step K (1 ≤ K ≤ total_steps), covering both final and non-final
+    step_k = data.draw(st.integers(min_value=1, max_value=total_steps))
+
+    # Request step K: step 1 from current_step=None, step K>1 from current_step=K-1
+    if step_k == 1:
+        result = await call_tool(tool_name)
+    else:
+        result = await call_tool(tool_name, {"current_step": step_k - 1})
+
+    assert "error" not in result, f"Unexpected error for step {step_k}: {result}"
+
+    instruction = result["instruction"]
+
+    # Extract the execution instruction portion (after the last --- separator)
+    exec_parts = instruction.split("---")
+    exec_instruction = exec_parts[-1] if len(exec_parts) > 1 else instruction
+
+    # Req 5.1 & 5.2: execution instruction references previous_outputs
+    assert "previous_outputs" in exec_instruction, (
+        f"Execution instruction for step {step_k}/{total_steps} of {tool_name} "
+        f"should contain 'previous_outputs', got: {exec_instruction!r}"
+    )
+
+
+# Feature: stateless-previous-outputs
+# Property 8: Completion signal includes accumulated outputs and compilation instructions
+# Validates: Requirements 4.1, 4.2, 4.3
+@settings(max_examples=100, deadline=None)
+@given(data=st.data(), previous_outputs=previous_outputs_strategy, step_output=step_output_strategy)
+@pytest.mark.asyncio
+async def test_property_completion_signal_includes_accumulated_outputs_and_compilation_instructions(
+    data: st.DataObject,
+    previous_outputs: dict[str, str],
+    step_output: str,
+) -> None:
+    """For any SOP, when current_step equals total_steps and previous_outputs
+    and step_output are provided, the completion response SHALL include a
+    `previous_outputs` field with the accumulated map, and the instruction
+    SHALL mention `previous_outputs` and instruct the LLM to include concrete
+    values from every step.
+
+    **Validates: Requirements 4.1, 4.2, 4.3**
+    """
+    tools = await mcp.list_tools()
+    sop_tools = [t.name for t in tools if t.name.startswith("run_sop_")]
+    assert len(sop_tools) > 0, "No SOP tools registered"
+
+    tool_name = data.draw(st.sampled_from(sop_tools))
+
+    info = await get_sop_info(tool_name)
+    assert "error" not in info, f"Unexpected error getting info for {tool_name}: {info}"
+    total_steps = info["total_steps"]
+
+    # Call with current_step=total_steps to trigger completion signal
+    result = await call_tool(
+        tool_name,
+        {
+            "current_step": total_steps,
+            "step_output": step_output,
+            "previous_outputs": previous_outputs,
+        },
+    )
+
+    assert "error" not in result, f"Unexpected error: {result}"
+
+    # Req 4.1: completion response includes previous_outputs with accumulated map
+    resp_prev = result.get("previous_outputs", {})
+
+    # The accumulated map should contain all entries from input previous_outputs
+    # plus the current step's output merged in
+    expected = dict(previous_outputs)
+    expected[str(total_steps)] = step_output
+    assert resp_prev == expected, (
+        f"Completion previous_outputs should be the accumulated map.\n  Expected: {expected}\n  Got:      {resp_prev}"
+    )
+
+    # Req 4.2: instruction mentions previous_outputs
+    instruction = result["instruction"]
+    assert "previous_outputs" in instruction, (
+        f"Completion instruction should mention 'previous_outputs', got: {instruction!r}"
+    )
+
+    # Req 4.3: instruction tells LLM to include concrete values from every step
+    assert "concrete" in instruction.lower() or "all" in instruction.lower(), (
+        f"Completion instruction should mention including concrete/all values, got: {instruction!r}"
+    )

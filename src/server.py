@@ -60,6 +60,8 @@ def _build_step_instruction(
             "and include your complete output in the step_output field. Your step_output MUST\n"
             "contain specific values, not just field names or summaries.\n"
             "\n"
+            "Include the `previous_outputs` from this response in your next tool call.\n"
+            "\n"
             "Once done, ask the user if they'd like to provide feedback about this SOP via\n"
             "the submit_sop_feedback tool.\n"
         )
@@ -70,9 +72,27 @@ def _build_step_instruction(
             f"data. Then call this tool with completed_step_id={current_step} and include your\n"
             "complete output in the step_output field. Your step_output MUST contain specific\n"
             "values, not just field names or summaries.\n"
+            "\n"
+            "Include the `previous_outputs` from this response in your next tool call.\n"
         )
 
     return "\n".join(parts)
+
+
+def _merge_outputs(
+    previous_outputs: dict[str, str] | None,
+    current_step: int | None,
+    step_output: str | None,
+) -> dict[str, str]:
+    """Merge step_output into previous_outputs under str(current_step).
+
+    Returns a new dict — never mutates the input.  When both
+    previous_outputs and step_output are None/empty the result is ``{}``.
+    """
+    merged = dict(previous_outputs) if previous_outputs else {}
+    if current_step is not None and step_output is not None:
+        merged[str(current_step)] = step_output
+    return merged
 
 
 def _create_sop_handler(sop_name: str):
@@ -82,6 +102,7 @@ def _create_sop_handler(sop_name: str):
         current_step: int | None = None,
         version: str | None = None,
         step_output: str | None = None,
+        previous_outputs: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Execute an SOP step by step.
 
@@ -91,6 +112,9 @@ def _create_sop_handler(sop_name: str):
             step_output: The concrete output you produced for the completed
                 step. Include all specific values, names, dates, and details
                 as specified in the step's Expected Output section.
+            previous_outputs: Accumulated outputs from prior steps. Keys are step
+                number strings, values are the concrete output text. Pass this field
+                back from the previous response to maintain context across steps.
         """
         tool_name = f"run_{sop_name}"
         logger.info("Invoking %s with args: current_step=%s, version=%s", tool_name, current_step, version)
@@ -120,6 +144,8 @@ def _create_sop_handler(sop_name: str):
             }
             if sop.mcp_server_prerequisites:
                 response["required_mcp_servers"] = sop.mcp_server_prerequisites
+            if previous_outputs:
+                response["previous_outputs"] = previous_outputs
             return response
 
         # Validate step number
@@ -130,24 +156,31 @@ def _create_sop_handler(sop_name: str):
         # Check if already complete
         if current_step == sop.total_steps:
             logger.info("%s completed successfully", tool_name)
+            accumulated = _merge_outputs(previous_outputs, current_step, step_output)
             completion_signal = (
                 "All steps complete. Now produce your FINAL COMPREHENSIVE DOCUMENT.\n\n"
+                "Use the `previous_outputs` field below to compile your final document.\n"
+                "Include all concrete values from every step.\n"
                 "Review the step_output you submitted for each step in this conversation.\n"
                 "Compile them into a single detailed document that includes ALL concrete values,\n"
                 "names, dates, numbers, and specifics from every step. Do not summarize — include\n"
                 "the full detail from each step's output."
             )
-            return {
+            response = {
                 "sop_name": sop.name,
                 "sop_version": sop.version,
                 "instruction": completion_signal,
             }
+            if accumulated:
+                response["previous_outputs"] = accumulated
+            return response
 
         # Return next step
         next_step = current_step + 1
         is_complete = next_step == sop.total_steps
+        accumulated = _merge_outputs(previous_outputs, current_step, step_output)
         logger.info("%s completed successfully", tool_name)
-        return {
+        response = {
             "sop_name": sop.name,
             "sop_version": sop.version,
             "instruction": _build_step_instruction(
@@ -158,6 +191,9 @@ def _create_sop_handler(sop_name: str):
                 sop=sop,
             ),
         }
+        if accumulated:
+            response["previous_outputs"] = accumulated
+        return response
 
     return handler
 
