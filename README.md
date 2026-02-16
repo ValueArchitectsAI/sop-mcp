@@ -71,6 +71,64 @@ Every `run_sop_*` tool accepts an optional `step_output` string parameter. This 
 
 The server accepts `step_output` but does not store or process it. The field exists purely to force the LLM to produce detailed output that lands in the conversation's tool-call history. When all steps are complete, the LLM can reference its own `step_output` submissions to compile a comprehensive final document. State lives entirely in the LLM's conversation context, keeping the server stateless.
 
+## The `previous_outputs` Field
+
+### Why it exists
+
+A comparative study (360+ trials across 6 models) found that smaller models (Nova Lite, Ministral 14B) lose context from earlier steps by the time they reach the final compilation step. Instead of referencing the concrete values they generated — registration numbers, policy IDs, dates — they produce summaries of step names. The `previous_outputs` field solves this by giving the LLM an explicit, structured record of every prior step's output at every step.
+
+### How it works
+
+Every `run_sop_*` tool accepts an optional `previous_outputs` parameter: a JSON object mapping step number strings to the concrete output text produced for that step. The server merges the current `step_output` into this map (keyed by the current step number) and returns the updated map in the response.
+
+The server remains fully stateless. It does not store `previous_outputs` between calls. The client sends all accumulated outputs with each request, and the server echoes them back with the latest step merged in. All accumulation state lives in the request/response cycle.
+
+### Request/response flow
+
+```
+# Step 1: Initial call — no previous_outputs in request or response
+Agent calls run_sop(current_step=None)
+→ Response: Step 1 instruction (no previous_outputs field)
+
+# Step 2: Agent submits step 1 output
+Agent calls run_sop(
+    current_step=1,
+    step_output="Registration: VALID, Number: BRN-2024-0738291",
+    previous_outputs={}
+)
+→ Response: Step 2 instruction + previous_outputs={
+    "1": "Registration: VALID, Number: BRN-2024-0738291"
+  }
+
+# Step 3: Agent submits step 2 output, passes accumulated map
+Agent calls run_sop(
+    current_step=2,
+    step_output="Insurance: Hartford Financial, Policy: HFS-GL-4829173",
+    previous_outputs={"1": "Registration: VALID, Number: BRN-2024-0738291"}
+)
+→ Response: Step 3 instruction + previous_outputs={
+    "1": "Registration: VALID, Number: BRN-2024-0738291",
+    "2": "Insurance: Hartford Financial, Policy: HFS-GL-4829173"
+  }
+
+# Completion: Agent submits final step output
+Agent calls run_sop(
+    current_step=3,
+    step_output="Compliance: All checks passed, Certificate: CC-2024-9182",
+    previous_outputs={
+        "1": "Registration: VALID, Number: BRN-2024-0738291",
+        "2": "Insurance: Hartford Financial, Policy: HFS-GL-4829173"
+    }
+)
+→ Response: Completion signal + previous_outputs={
+    "1": "Registration: VALID, Number: BRN-2024-0738291",
+    "2": "Insurance: Hartford Financial, Policy: HFS-GL-4829173",
+    "3": "Compliance: All checks passed, Certificate: CC-2024-9182"
+  }
+```
+
+At completion, the LLM uses the `previous_outputs` map to compile the final document with all concrete values — no reliance on conversation history needed.
+
 ## Storage Configuration
 
 By default, SOPs are stored in the bundled `src/sops/` directory (ephemeral — data may be lost if the package cache refreshes).
