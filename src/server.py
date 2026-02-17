@@ -175,8 +175,6 @@ def _create_sop_handler(sop_name: str, total_steps: int, versions: list[str], la
                 sop=sop if current_step == 0 else None,
             ),
         }
-        if current_step == 0 and sop.mcp_server_prerequisites:
-            response["required_mcp_servers"] = sop.mcp_server_prerequisites
         if accumulated:
             response["previous_outputs"] = accumulated
         return response
@@ -339,6 +337,11 @@ def register_sop_tools():
         versions = backend.list_versions(sop_name)
         version_info = ", ".join(f"v{v}" for v in versions)
 
+        prereq_info = ""
+        if sop.mcp_server_prerequisites:
+            servers = ", ".join(sop.mcp_server_prerequisites)
+            prereq_info = f"\n\nRequired MCP Servers: {servers}. Ensure these are available before running this SOP."
+
         mcp.tool(
             name=f"run_{sop.tool_name}",
             description=(
@@ -349,6 +352,7 @@ def register_sop_tools():
                 "returned step_content. Do NOT just read or summarize the step — perform the actions "
                 "using your available tools. After completing a step, call this tool again with the "
                 "current_step value to advance to the next step."
+                f"{prereq_info}"
             ),
         )(_create_sop_handler(sop_name, sop.total_steps, versions, sop.version))
 
