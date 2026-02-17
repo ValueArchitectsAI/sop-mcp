@@ -75,12 +75,12 @@ class TestSubmitFeedback:
         assert "timestamp" in data
 
     async def test_submit_feedback_unknown_sop(self, client):
-        data = await _call(
-            client,
+        result = await client.call_tool(
             "submit_sop_feedback",
             {"sop_name": "nonexistent_sop", "feedback": "should fail"},
+            raise_on_error=False,
         )
-        assert "error" in data
+        assert result.is_error
 
 
 # ---------------------------------------------------------------------------
@@ -115,15 +115,16 @@ class TestSopWorkflowRunThrough:
         assert data["sop_version"] == "1.0"
 
     async def test_invalid_step_returns_error(self, client):
-        # current_step=0 is rejected by FastMCP's Field(ge=1) validation
-        result = await client.call_tool("run_sop_creation_guide", {"current_step": 0}, raise_on_error=False)
+        # Negative steps are rejected by FastMCP's Field(ge=0) validation
+        result = await client.call_tool("run_sop_creation_guide", {"current_step": -1}, raise_on_error=False)
         assert result.is_error
 
     async def test_step_beyond_total_returns_error(self, client):
         total = _get_total_steps()
-        data = await _call(client, "run_sop_creation_guide", {"current_step": total + 1})
-        assert "error" in data
+        # Rejected by FastMCP's Field(le=total_steps) schema validation
+        result = await client.call_tool("run_sop_creation_guide", {"current_step": total + 1}, raise_on_error=False)
+        assert result.is_error
 
     async def test_invalid_version_returns_error(self, client):
-        data = await _call(client, "run_sop_creation_guide", {"version": "99.99"})
-        assert "error" in data
+        result = await client.call_tool("run_sop_creation_guide", {"version": "99.99"}, raise_on_error=False)
+        assert result.is_error

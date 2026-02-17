@@ -4,8 +4,6 @@ This module contains the MCP server with dynamically registered SOP tools
 using FastMCP (high-level MCP SDK API).
 """
 
-from __future__ import annotations
-
 import logging
 import re
 from datetime import datetime, timezone
@@ -96,12 +94,30 @@ def _merge_outputs(
     return merged
 
 
-def _create_sop_handler(sop_name: str):
-    """Create a handler function for an SOP tool that supports an optional version parameter."""
+def _create_sop_handler(sop_name: str, total_steps: int, versions: list[str], latest_version: str):
+    """Create a handler function for an SOP tool with step bounds and version enum baked into the schema."""
+
+    StepType = Annotated[
+        int,
+        Field(
+            default=0,
+            ge=0,
+            le=total_steps,
+            description=f"The step to advance from. 0 to start, {total_steps} to complete.",
+        ),
+    ]
+
+    VersionType = Annotated[
+        Literal[tuple(versions)],
+        Field(
+            default=latest_version,
+            description=f"Semantic version. Available: {', '.join(versions)}. Defaults to {latest_version}.",
+        ),
+    ]
 
     def handler(
-        current_step: Annotated[int, Field(ge=1, description="The step to advance from.")] | None = None,
-        version: Annotated[str, "Semantic version (e.g. '1.0', '2.1.0'). Defaults to latest."] | None = None,
+        current_step: StepType,
+        version: VersionType,
         step_output: Annotated[
             str,
             "The concrete output you produced for the completed step. "
@@ -118,41 +134,10 @@ def _create_sop_handler(sop_name: str):
         tool_name = f"run_{sop_name}"
         logger.info("Invoking %s with args: current_step=%s, version=%s", tool_name, current_step, version)
 
-        try:
-            content = backend.read_sop(sop_name, version)
-            sop = SOP.from_content(content)
-        except FileNotFoundError as e:
-            logger.warning("%s error: %s", tool_name, e)
-            return {"error": str(e)}
-        except ValueError as e:
-            logger.warning("%s error: %s", tool_name, e)
-            return {"error": str(e)}
+        content = backend.read_sop(sop_name, version)
+        sop = SOP.from_content(content)
 
-        if sop.total_steps == 0:
-            logger.warning("%s error: SOP has no steps", tool_name)
-            return {"error": "SOP has no steps"}
-
-        # If no current_step provided, start from step 1 with overview
-        if current_step is None:
-            is_complete = sop.total_steps == 1
-            logger.info("%s completed successfully", tool_name)
-            response = {
-                "sop_name": sop.name,
-                "sop_version": sop.version,
-                "instruction": _build_step_instruction(sop.steps[0], 1, sop.total_steps, is_complete, sop=sop),
-            }
-            if sop.mcp_server_prerequisites:
-                response["required_mcp_servers"] = sop.mcp_server_prerequisites
-            if previous_outputs:
-                response["previous_outputs"] = previous_outputs
-            return response
-
-        # Validate step number
-        if current_step > sop.total_steps:
-            logger.warning("%s error: Invalid step %s", tool_name, current_step)
-            return {"error": f"Invalid step {current_step}. SOP has {sop.total_steps} steps (1-{sop.total_steps})."}
-
-        # Check if already complete
+        # Completion
         if current_step == sop.total_steps:
             logger.info("%s completed successfully", tool_name)
             accumulated = _merge_outputs(previous_outputs, current_step, step_output)
@@ -187,9 +172,11 @@ def _create_sop_handler(sop_name: str):
                 next_step,
                 sop.total_steps,
                 is_complete,
-                sop=sop,
+                sop=sop if current_step == 0 else None,
             ),
         }
+        if current_step == 0 and sop.mcp_server_prerequisites:
+            response["required_mcp_servers"] = sop.mcp_server_prerequisites
         if accumulated:
             response["previous_outputs"] = accumulated
         return response
@@ -292,30 +279,25 @@ def publish_sop(
     return result
 
 
+_available_sops = backend.list_sops()
+_SopNameType = Literal[tuple(_available_sops)] if _available_sops else str
+
+
 @mcp.tool()
-def submit_sop_feedback(sop_name: str, feedback: str) -> dict[str, Any]:
+def submit_sop_feedback(
+    sop_name: Annotated[_SopNameType, Field(description=f"Name of the SOP. Available: {', '.join(_available_sops)}.")],
+    feedback: Annotated[str, Field(min_length=1, description="The improvement suggestion or feedback text.")],
+) -> dict[str, Any]:
     """Submit improvement feedback for a specific SOP.
 
     Collects user feedback about an SOP and stores it in a feedback.md file
     inside the SOP's folder. This feedback will be used to optimize the SOP
     in its next revision.
-
-    Args:
-        sop_name: Name of the SOP to provide feedback for (e.g. "authoring_new_sop").
-        feedback: The improvement suggestion or feedback text.
     """
     logger.info("Invoking submit_sop_feedback with args: sop_name=%s, feedback=<%s chars>", sop_name, len(feedback))
-    available = backend.list_sops()
-    if sop_name not in available:
-        logger.warning("submit_sop_feedback error: SOP '%s' not found", sop_name)
-        return {"error": f"SOP '{sop_name}' not found. Available: {', '.join(available)}"}
 
-    try:
-        content = backend.read_sop(sop_name)
-        sop = SOP.from_content(content)
-    except (FileNotFoundError, ValueError) as e:
-        logger.warning("submit_sop_feedback error: %s", e)
-        return {"error": str(e)}
+    content = backend.read_sop(sop_name)
+    sop = SOP.from_content(content)
 
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     entry = f"## Feedback — {timestamp}\n\n**SOP Version:** v{sop.version}\n\n{feedback}\n\n---\n\n"
@@ -365,7 +347,7 @@ def register_sop_tools():
                 "using your available tools. After completing a step, call this tool again with the "
                 "current_step value to advance to the next step."
             ),
-        )(_create_sop_handler(sop_name))
+        )(_create_sop_handler(sop_name, sop.total_steps, versions, sop.version))
 
 
 # Register all SOP tools at module load time

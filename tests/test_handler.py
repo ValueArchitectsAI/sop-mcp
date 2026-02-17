@@ -161,14 +161,15 @@ class TestSopToolContinue:
     async def test_error_for_step_beyond_total(self):
         info = await get_sop_info("run_sop_creation_guide")
         total = info["total_steps"]
-        result = await call_tool("run_sop_creation_guide", {"current_step": total + 1})
-        assert "error" in result
+        # Rejected by FastMCP's Field(le=total_steps) schema validation
+        with pytest.raises(Exception, match="less than or equal to"):
+            await call_tool("run_sop_creation_guide", {"current_step": total + 1})
 
     @pytest.mark.asyncio
-    async def test_error_for_invalid_step_zero(self):
-        # current_step=0 is rejected by FastMCP's Field(ge=1) validation
-        with pytest.raises(Exception, match="greater than or equal to 1"):
-            await call_tool("run_sop_creation_guide", {"current_step": 0})
+    async def test_error_for_invalid_step_negative(self):
+        # Negative steps are rejected by FastMCP's Field(ge=0) validation
+        with pytest.raises(Exception, match="greater than or equal to 0"):
+            await call_tool("run_sop_creation_guide", {"current_step": -1})
 
 
 class TestSopToolVersionParameter:
@@ -187,9 +188,8 @@ class TestSopToolVersionParameter:
 
     @pytest.mark.asyncio
     async def test_invalid_version_returns_error(self):
-        result = await call_tool("run_sop_creation_guide", {"version": "99.99.99"})
-        assert "error" in result
-        assert "99.99.99" in result["error"]
+        with pytest.raises(Exception, match="literal_error"):
+            await call_tool("run_sop_creation_guide", {"version": "99.99.99"})
 
     @pytest.mark.asyncio
     async def test_version_with_step_navigation(self):
@@ -451,7 +451,7 @@ async def test_property_non_final_steps_contain_execution_instruction_with_corre
     # Pick a random non-final step K where 1 ≤ K < N
     step_k = data.draw(st.integers(min_value=1, max_value=total_steps - 1))
 
-    # Request step K: step 1 comes from current_step=None, step K>1 from current_step=K-1
+    # Request step K: step 1 comes from current_step=0 (default), step K>1 from current_step=K-1
     if step_k == 1:
         result = await call_tool(tool_name)
     else:
@@ -670,7 +670,7 @@ async def test_property_first_step_contains_sop_overview_header(
 
     tool_name = data.draw(st.sampled_from(sop_tools))
 
-    # Request the first step (current_step omitted)
+    # Request the first step (current_step defaults to 0)
     result = await call_tool(tool_name)
     assert "error" not in result, f"Unexpected error starting {tool_name}: {result}"
 
@@ -922,7 +922,7 @@ async def test_property_execution_instructions_reference_previous_outputs(
     # Pick any valid step K (1 ≤ K ≤ total_steps), covering both final and non-final
     step_k = data.draw(st.integers(min_value=1, max_value=total_steps))
 
-    # Request step K: step 1 from current_step=None, step K>1 from current_step=K-1
+    # Request step K: step 1 from current_step=0 (default), step K>1 from current_step=K-1
     if step_k == 1:
         result = await call_tool(tool_name)
     else:
