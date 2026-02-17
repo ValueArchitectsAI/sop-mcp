@@ -22,9 +22,7 @@ from src.utils.storage_local import BUNDLED_SOPS_DIR
 async def call_tool(name: str, arguments: dict | None = None) -> dict:
     """Helper: call a FastMCP tool and return the structured result dict."""
     result = await mcp.call_tool(name, arguments or {})
-    if isinstance(result, tuple):
-        return result[1]
-    return json.loads(result[0].text)
+    return json.loads(result.content[0].text)
 
 
 async def get_sop_info(tool_name: str) -> dict:
@@ -334,7 +332,7 @@ async def test_property_step_output_is_optional_schema_parameter(
     assert len(sop_tools) > 0, "No SOP tools registered"
 
     tool = data.draw(st.sampled_from(sop_tools))
-    schema = tool.inputSchema
+    schema = tool.parameters
 
     # Req 1.1: schema includes a step_output property of type string
     properties = schema.get("properties", {})
@@ -379,7 +377,7 @@ async def test_property_schema_includes_optional_previous_outputs_of_type_object
     assert len(sop_tools) > 0, "No SOP tools registered"
 
     tool = data.draw(st.sampled_from(sop_tools))
-    schema = tool.inputSchema
+    schema = tool.parameters
 
     # Req 1.1: schema includes a previous_outputs property of type object
     properties = schema.get("properties", {})

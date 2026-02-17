@@ -20,7 +20,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-    "mcp>=1.0.0",
+    "fastmcp>=3.0.0rc1",
 ]
 
 [project.urls]
@@ -28,8 +28,8 @@ Homepage = "https://github.com/ValueArchitectsAI/sop-mcp"
 Repository = "https://github.com/ValueArchitectsAI/sop-mcp"
 Issues = "https://github.com/ValueArchitectsAI/sop-mcp/issues"
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "hypothesis>=6.0.0,<6.123.0",
     "pytest>=8.0.0",
     "pytest-asyncio>=1.0.0",
