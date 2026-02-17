@@ -9,9 +9,10 @@ from __future__ import annotations
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from fastmcp import FastMCP
+from pydantic import Field
 
 from src.utils import SOP, get_storage_backend
 
@@ -99,23 +100,21 @@ def _create_sop_handler(sop_name: str):
     """Create a handler function for an SOP tool that supports an optional version parameter."""
 
     def handler(
-        current_step: int | None = None,
-        version: str | None = None,
-        step_output: str | None = None,
-        previous_outputs: dict[str, str] | None = None,
+        current_step: Annotated[int, Field(ge=1, description="The step to advance from.")] | None = None,
+        version: Annotated[str, "Semantic version (e.g. '1.0', '2.1.0'). Defaults to latest."] | None = None,
+        step_output: Annotated[
+            str,
+            "The concrete output you produced for the completed step. "
+            "Include all specific values, names, dates, and details.",
+        ]
+        | None = None,
+        previous_outputs: Annotated[
+            dict[str, str],
+            "Accumulated outputs from prior steps. Pass this field back from the previous response.",
+        ]
+        | None = None,
     ) -> dict[str, Any]:
-        """Execute an SOP step by step.
-
-        Args:
-            current_step: The step to advance from. Omit to start from the beginning.
-            version: Optional semantic version (e.g. "1.0", "2.1.0"). Defaults to latest.
-            step_output: The concrete output you produced for the completed
-                step. Include all specific values, names, dates, and details
-                as specified in the step's Expected Output section.
-            previous_outputs: Accumulated outputs from prior steps. Keys are step
-                number strings, values are the concrete output text. Pass this field
-                back from the previous response to maintain context across steps.
-        """
+        """Execute an SOP step by step."""
         tool_name = f"run_{sop_name}"
         logger.info("Invoking %s with args: current_step=%s, version=%s", tool_name, current_step, version)
 
@@ -149,7 +148,7 @@ def _create_sop_handler(sop_name: str):
             return response
 
         # Validate step number
-        if current_step < 1 or current_step > sop.total_steps:
+        if current_step > sop.total_steps:
             logger.warning("%s error: Invalid step %s", tool_name, current_step)
             return {"error": f"Invalid step {current_step}. SOP has {sop.total_steps} steps (1-{sop.total_steps})."}
 
@@ -202,25 +201,20 @@ def _create_sop_handler(sop_name: str):
 
 
 @mcp.tool()
-def publish_sop(content: str, change_type: str = "minor") -> dict[str, Any]:
+def publish_sop(
+    content: Annotated[str, Field(min_length=1, description="The full SOP markdown content to publish.")],
+    change_type: Annotated[
+        Literal["major", "minor", "patch"],
+        "Semver bump type: major (breaking), minor (feature), patch (bugfix).",
+    ] = "minor",
+) -> dict[str, Any]:
     """Publish a new or updated Standard Operating Procedure document.
 
     The SOP name is extracted from the content (expected format: SOP-WORD-WORD-WORD).
-    The version is auto-bumped based on the change_type using semantic versioning:
-    - "major": breaking change (e.g. 1.2.0 -> 2.0.0)
-    - "minor": new feature / non-breaking change (e.g. 1.2.0 -> 1.3.0)
-    - "patch": bugfix (e.g. 1.2.0 -> 1.2.1)
-
+    The version is auto-bumped based on the change_type using semantic versioning.
     For brand-new SOPs the initial version is 1.0.0 regardless of change_type.
-    The version is written into the document and the SOP becomes the latest.
     """
     logger.info("Invoking publish_sop with args: content=<%s chars>, change_type=%s", len(content), change_type)
-
-    if not content or not content.strip():
-        return {"error": "SOP content is required"}
-
-    if change_type not in ("major", "minor", "patch"):
-        return {"error": f"Invalid change_type '{change_type}'. Must be one of: major, minor, patch"}
 
     try:
         sop = SOP.from_content(content)

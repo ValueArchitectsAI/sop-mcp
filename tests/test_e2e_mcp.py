@@ -115,8 +115,9 @@ class TestSopWorkflowRunThrough:
         assert data["sop_version"] == "1.0"
 
     async def test_invalid_step_returns_error(self, client):
-        data = await _call(client, "run_sop_creation_guide", {"current_step": 0})
-        assert "error" in data
+        # current_step=0 is rejected by FastMCP's Field(ge=1) validation
+        result = await client.call_tool("run_sop_creation_guide", {"current_step": 0}, raise_on_error=False)
+        assert result.is_error
 
     async def test_step_beyond_total_returns_error(self, client):
         total = _get_total_steps()

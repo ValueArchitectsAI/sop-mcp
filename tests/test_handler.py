@@ -166,8 +166,9 @@ class TestSopToolContinue:
 
     @pytest.mark.asyncio
     async def test_error_for_invalid_step_zero(self):
-        result = await call_tool("run_sop_creation_guide", {"current_step": 0})
-        assert "error" in result
+        # current_step=0 is rejected by FastMCP's Field(ge=1) validation
+        with pytest.raises(Exception, match="greater than or equal to 1"):
+            await call_tool("run_sop_creation_guide", {"current_step": 0})
 
 
 class TestSopToolVersionParameter:
