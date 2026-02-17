@@ -15,8 +15,18 @@ Naming convention:
 from __future__ import annotations
 
 import re
+from enum import Enum
 from pathlib import Path
 from typing import Any
+
+
+class ChangeType(Enum):
+    """Semantic versioning bump type for SOP publishing."""
+
+    MAJOR = "major"
+    MINOR = "minor"
+    PATCH = "patch"
+
 
 # Directory where SOP files are stored, relative to the src directory
 SOPS_DIR = Path(__file__).parent.parent / "sops"
@@ -111,14 +121,14 @@ class SOP:
         return self.overview
 
     @classmethod
-    def publish(cls, content: str, change_type: str = "minor") -> "SOP":
+    def publish(cls, content: str, change_type: ChangeType = ChangeType.MINOR) -> "SOP":
         """Validate content, auto-bump the semantic version, write to disk, and return the SOP.
 
         The version is determined automatically based on the change_type and the
         latest existing version for this SOP's base name:
-        - "major": breaking change (e.g. 1.2.0 -> 2.0.0)
-        - "minor": new feature / non-breaking change (e.g. 1.2.0 -> 1.3.0)
-        - "patch": bugfix (e.g. 1.2.0 -> 1.2.1)
+        - ChangeType.MAJOR: breaking change (e.g. 1.2.0 -> 2.0.0)
+        - ChangeType.MINOR: new feature / non-breaking change (e.g. 1.2.0 -> 1.3.0)
+        - ChangeType.PATCH: bugfix (e.g. 1.2.0 -> 1.2.1)
 
         For brand-new SOPs the initial version is 1.0.0 regardless of change_type.
         The version is written into the document and the SOP becomes the latest.
@@ -132,8 +142,8 @@ class SOP:
         if not content or not content.strip():
             raise ValueError("SOP content is required")
 
-        if change_type not in ("major", "minor", "patch"):
-            raise ValueError(f"Invalid change_type '{change_type}'. Must be one of: major, minor, patch")
+        if not isinstance(change_type, ChangeType):
+            raise ValueError(f"Invalid change_type '{change_type}'. Must be a ChangeType enum member.")
 
         sop = cls.from_content(content)
 
@@ -380,14 +390,14 @@ def resolve_sop(sop_name: str, version: str | None = None) -> SOP:
     raise ValueError(f"Version '{version}' not found for '{sop_name}'. Available versions: {', '.join(available)}")
 
 
-def _bump_version(sop_name: str, change_type: str) -> str:
+def _bump_version(sop_name: str, change_type: ChangeType) -> str:
     """Calculate the next version for an SOP given a change type.
 
     If no prior versions exist, returns "1.0.0".
     Otherwise bumps the latest version according to semver rules:
-    - major: X+1.0.0
-    - minor: X.Y+1.0
-    - patch: X.Y.Z+1
+    - ChangeType.MAJOR: X+1.0.0
+    - ChangeType.MINOR: X.Y+1.0
+    - ChangeType.PATCH: X.Y.Z+1
     """
     versions = list_versions(sop_name)
 
@@ -399,14 +409,14 @@ def _bump_version(sop_name: str, change_type: str) -> str:
     while len(parts) < 3:
         parts.append(0)
 
-    if change_type == "major":
+    if change_type is ChangeType.MAJOR:
         parts[0] += 1
         parts[1] = 0
         parts[2] = 0
-    elif change_type == "minor":
+    elif change_type is ChangeType.MINOR:
         parts[1] += 1
         parts[2] = 0
-    elif change_type == "patch":
+    elif change_type is ChangeType.PATCH:
         parts[2] += 1
 
     return ".".join(str(p) for p in parts)

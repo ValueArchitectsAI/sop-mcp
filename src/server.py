@@ -12,7 +12,7 @@ from typing import Annotated, Any, Literal
 from fastmcp import FastMCP
 from pydantic import Field
 
-from src.utils import SOP, get_storage_backend
+from src.utils import SOP, ChangeType, get_storage_backend
 
 logger = logging.getLogger(__name__)
 
@@ -191,9 +191,12 @@ def _create_sop_handler(sop_name: str, total_steps: int, versions: list[str], la
 def publish_sop(
     content: Annotated[str, Field(min_length=1, description="The full SOP markdown content to publish.")],
     change_type: Annotated[
-        Literal["major", "minor", "patch"],
-        "Semver bump type: major (breaking), minor (feature), patch (bugfix).",
-    ] = "minor",
+        ChangeType,
+        Field(
+            default=ChangeType.MINOR,
+            description="Semver bump type: major (breaking), minor (feature), patch (bugfix).",
+        ),
+    ] = ChangeType.MINOR,
 ) -> dict[str, Any]:
     """Publish a new or updated Standard Operating Procedure document.
 
@@ -201,7 +204,7 @@ def publish_sop(
     The version is auto-bumped based on the change_type using semantic versioning.
     For brand-new SOPs the initial version is 1.0.0 regardless of change_type.
     """
-    logger.info("Invoking publish_sop with args: content=<%s chars>, change_type=%s", len(content), change_type)
+    logger.info("Invoking publish_sop with args: content=<%s chars>, change_type=%s", len(content), change_type.value)
 
     try:
         sop = SOP.from_content(content)
@@ -220,14 +223,14 @@ def publish_sop(
         parts = list(_parse_semver(latest))
         while len(parts) < 3:
             parts.append(0)
-        if change_type == "major":
+        if change_type is ChangeType.MAJOR:
             parts[0] += 1
             parts[1] = 0
             parts[2] = 0
-        elif change_type == "minor":
+        elif change_type is ChangeType.MINOR:
             parts[1] += 1
             parts[2] = 0
-        elif change_type == "patch":
+        elif change_type is ChangeType.PATCH:
             parts[2] += 1
         new_version = ".".join(str(p) for p in parts)
 
@@ -248,10 +251,10 @@ def publish_sop(
         "sop_name": sop.name,
         "title": sop.title,
         "version": new_version,
-        "change_type": change_type,
+        "change_type": change_type.value,
         "total_steps": sop.total_steps,
         "message": (
-            f"SOP '{sop.name}' published as v{new_version} ({change_type}). "
+            f"SOP '{sop.name}' published as v{new_version} ({change_type.value}). "
             "Restart the server to register the new tool."
         ),
     }
