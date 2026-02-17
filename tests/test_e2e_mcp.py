@@ -59,6 +59,51 @@ class TestToolDiscovery:
 
 
 # ---------------------------------------------------------------------------
+# Resource discovery and reading
+# ---------------------------------------------------------------------------
+
+
+class TestResourceDiscovery:
+    async def test_list_resources_includes_sop_creation_guide(self, client):
+        resources = await client.list_resources()
+        uris = [str(r.uri) for r in resources]
+        assert "sop://sop_creation_guide" in uris
+
+    async def test_list_resources_has_markdown_mime_type(self, client):
+        resources = await client.list_resources()
+        sop_res = next(r for r in resources if str(r.uri) == "sop://sop_creation_guide")
+        assert sop_res.mimeType == "text/markdown"
+
+    async def test_list_resources_description_contains_overview(self, client):
+        resources = await client.list_resources()
+        sop_res = next(r for r in resources if str(r.uri) == "sop://sop_creation_guide")
+        assert "Standard Operating Procedure" in sop_res.description
+
+    async def test_list_resource_templates_includes_versioned(self, client):
+        templates = await client.list_resource_templates()
+        uri_templates = [str(t.uriTemplate) for t in templates]
+        assert any("sop_name" in t for t in uri_templates)
+
+
+class TestReadResource:
+    async def test_read_sop_creation_guide_latest(self, client):
+        content = await client.read_resource("sop://sop_creation_guide")
+        text = content[0].content if hasattr(content[0], "content") else str(content[0])
+        assert "# Standard Operating Procedure" in text
+        assert "Step 1" in text
+
+    async def test_read_sop_creation_guide_specific_version(self, client):
+        content = await client.read_resource("sop://sop_creation_guide?version=1.0")
+        text = content[0].content if hasattr(content[0], "content") else str(content[0])
+        assert "# Standard Operating Procedure" in text
+        assert "Version**: 1.0" in text
+
+    async def test_read_sop_creation_guide_invalid_version(self, client):
+        with pytest.raises(Exception):
+            await client.read_resource("sop://sop_creation_guide?version=99.99")
+
+
+# ---------------------------------------------------------------------------
 # submit_sop_feedback
 # ---------------------------------------------------------------------------
 

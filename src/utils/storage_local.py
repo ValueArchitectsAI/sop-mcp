@@ -13,7 +13,7 @@ from pathlib import Path
 from .sop_parser import _parse_semver
 
 # Directory containing the SOPs bundled with the package.
-BUNDLED_SOPS_DIR = Path(__file__).parent.parent / "sops"
+BUNDLED_SOPS_DIR = Path(__file__).parent.parent / "mcp" / "resources"
 
 
 class LocalFilesystemBackend:

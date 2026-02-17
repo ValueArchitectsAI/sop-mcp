@@ -28,8 +28,8 @@ class ChangeType(Enum):
     PATCH = "patch"
 
 
-# Directory where SOP files are stored, relative to the src directory
-SOPS_DIR = Path(__file__).parent.parent / "sops"
+# Directory where SOP files are stored
+SOPS_DIR = Path(__file__).parent.parent / "mcp" / "resources"
 
 
 def _parse_semver(version_str: str) -> tuple[int, ...]:

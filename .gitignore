@@ -214,3 +214,5 @@ src/sops/*
 
 # SOP feedback files (generated at runtime by E2E tests and users)
 **/feedback.md
+src/mcp/resources/*/*
+!src/mcp/resources/sop_creation_guide/

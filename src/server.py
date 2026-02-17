@@ -9,7 +9,9 @@ from pathlib import Path
 
 from fastmcp import FastMCP
 from fastmcp.server.providers import FileSystemProvider
+from fastmcp.server.transforms import ResourcesAsTools
 
+from src.mcp.resources.sop_content import register_sop_resources
 from src.mcp.tools.publish_sop import EPHEMERAL_WARNING, publish_sop  # noqa: F401
 from src.mcp.tools.run_sop import _create_sop_handler, _merge_outputs  # noqa: F401
 from src.mcp.tools.submit_sop_feedback import submit_sop_feedback  # noqa: F401
@@ -59,8 +61,12 @@ def register_sop_tools() -> None:
         )(_create_sop_handler(sop, versions))
 
 
-# Register all SOP tools at module load time
+# Register dynamic SOP tools and concrete resources at module load time
 register_sop_tools()
+register_sop_resources(mcp)
+
+# Expose resources as tools for clients that lack resource protocol support
+mcp.add_transform(ResourcesAsTools(mcp))
 
 
 def run():
