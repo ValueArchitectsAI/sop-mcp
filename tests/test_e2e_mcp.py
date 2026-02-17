@@ -12,7 +12,8 @@ import pytest
 import pytest_asyncio
 from fastmcp import Client
 
-from src.server import mcp
+from src.server import backend, mcp
+from src.utils import SOP
 
 pytestmark = pytest.mark.asyncio
 
@@ -31,6 +32,12 @@ async def _call(client: Client, tool_name: str, arguments: dict | None = None) -
     return json.loads(result.content[0].text)
 
 
+def _get_total_steps(sop_name: str = "sop_creation_guide") -> int:
+    """Get total steps for an SOP directly from the backend."""
+    content = backend.read_sop(sop_name)
+    return SOP.from_content(content).total_steps
+
+
 # ---------------------------------------------------------------------------
 # Tool discovery
 # ---------------------------------------------------------------------------
@@ -40,7 +47,6 @@ class TestToolDiscovery:
     async def test_lists_core_tools(self, client):
         tools = await client.list_tools()
         names = [t.name for t in tools]
-        assert "explain_sop" in names
         assert "publish_sop" in names
         assert "submit_sop_feedback" in names
 
@@ -50,32 +56,6 @@ class TestToolDiscovery:
         run_tools = [n for n in names if n.startswith("run_")]
         assert len(run_tools) > 0, "Expected at least one dynamic run_ tool"
         assert "run_sop_creation_guide" in names
-
-
-# ---------------------------------------------------------------------------
-# explain_sop
-# ---------------------------------------------------------------------------
-
-
-class TestExplainSop:
-    async def test_list_all_sops(self, client):
-        data = await _call(client, "explain_sop")
-        assert "available_sops" in data
-        assert data["total"] > 0
-        names = [s["name"] for s in data["available_sops"]]
-        assert "sop_creation_guide" in names
-
-    async def test_explain_specific_sop(self, client):
-        data = await _call(client, "explain_sop", {"sop_name": "sop_creation_guide"})
-        assert data["sop_name"] == "sop_creation_guide"
-        assert "title" in data
-        assert "overview" in data
-        assert data["total_steps"] > 0
-        assert isinstance(data["steps"], list)
-
-    async def test_explain_unknown_sop_returns_error(self, client):
-        data = await _call(client, "explain_sop", {"sop_name": "does_not_exist"})
-        assert "error" in data
 
 
 # ---------------------------------------------------------------------------
@@ -110,8 +90,7 @@ class TestSubmitFeedback:
 
 class TestSopWorkflowRunThrough:
     async def test_full_walkthrough(self, client):
-        info = await _call(client, "explain_sop", {"sop_name": "sop_creation_guide"})
-        total = info["total_steps"]
+        total = _get_total_steps()
         assert total > 1, "SOP should have multiple steps"
 
         data = await _call(client, "run_sop_creation_guide")
@@ -130,8 +109,7 @@ class TestSopWorkflowRunThrough:
         assert data["sop_version"] == "1.0"
         assert "instruction" in data
 
-        info = await _call(client, "explain_sop", {"sop_name": "sop_creation_guide"})
-        total = info["total_steps"]
+        total = _get_total_steps()
         data = await _call(client, "run_sop_creation_guide", {"version": "1.0", "current_step": total})
         assert "All steps complete" in data["instruction"]
         assert data["sop_version"] == "1.0"
@@ -141,8 +119,7 @@ class TestSopWorkflowRunThrough:
         assert "error" in data
 
     async def test_step_beyond_total_returns_error(self, client):
-        info = await _call(client, "explain_sop", {"sop_name": "sop_creation_guide"})
-        total = info["total_steps"]
+        total = _get_total_steps()
         data = await _call(client, "run_sop_creation_guide", {"current_step": total + 1})
         assert "error" in data
 

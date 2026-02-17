@@ -345,65 +345,6 @@ def submit_sop_feedback(sop_name: str, feedback: str) -> dict[str, Any]:
     return result
 
 
-# --- Explain SOP tool ---
-
-
-@mcp.tool()
-def explain_sop(sop_name: str | None = None) -> dict[str, Any]:
-    """Get details about available SOPs.
-
-    Call with no arguments to list all SOPs, or pass a specific sop_name to get its full overview and step outline."""
-    logger.info("Invoking explain_sop with args: sop_name=%s", sop_name)
-    available = backend.list_sops()
-
-    if sop_name is None:
-        summaries = []
-        for name in available:
-            try:
-                content = backend.read_sop(name)
-                sop = SOP.from_content(content)
-                summaries.append(
-                    {
-                        "name": name,
-                        "title": sop.title,
-                        "version": sop.version,
-                        "overview": sop.truncated_overview,
-                        "total_steps": sop.total_steps,
-                    }
-                )
-            except (FileNotFoundError, ValueError):
-                summaries.append({"name": name, "error": "Could not parse SOP"})
-        logger.info("explain_sop completed successfully")
-        return {"available_sops": summaries, "total": len(summaries)}
-
-    if sop_name not in available:
-        logger.warning("explain_sop error: SOP '%s' not found", sop_name)
-        return {"error": f"SOP '{sop_name}' not found. Available: {', '.join(available)}"}
-
-    try:
-        content = backend.read_sop(sop_name)
-        sop = SOP.from_content(content)
-    except (FileNotFoundError, ValueError) as e:
-        logger.warning("explain_sop error: %s", e)
-        return {"error": str(e)}
-
-    step_outline = [step.splitlines()[0].replace("### ", "") for step in sop.steps]
-
-    result = {
-        "sop_name": sop.name,
-        "title": sop.title,
-        "version": sop.version,
-        "overview": sop.overview,
-        "total_steps": sop.total_steps,
-        "steps": step_outline,
-    }
-    if sop.prerequisites:
-        result["prerequisites"] = sop.prerequisites
-
-    logger.info("explain_sop completed successfully")
-    return result
-
-
 # --- Dynamic SOP tool registration ---
 
 

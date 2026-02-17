@@ -45,7 +45,6 @@ Every response includes an `instruction` field that tells the agent to *act*, no
 
 | Tool | Description |
 |------|-------------|
-| `explain_sop` | List all available SOPs, or get details about a specific one |
 | `publish_sop` | Publish a new or updated SOP with automatic semver bumping |
 | `submit_sop_feedback` | Submit improvement feedback for a specific SOP |
 | `run_<sop_name>` | Step-by-step execution of an SOP (one tool per SOP, registered dynamically) |

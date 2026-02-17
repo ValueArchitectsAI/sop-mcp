@@ -26,9 +26,21 @@ async def call_tool(name: str, arguments: dict | None = None) -> dict:
 
 
 async def get_sop_info(tool_name: str) -> dict:
-    """Helper: get SOP metadata (total_steps, title, overview) via explain_sop."""
+    """Helper: get SOP metadata (total_steps, title, overview) via the backend."""
+    from src.server import backend
+    from src.utils import SOP
+
     sop_name = tool_name.removeprefix("run_")
-    return await call_tool("explain_sop", {"sop_name": sop_name})
+    content = backend.read_sop(sop_name)
+    sop = SOP.from_content(content)
+    return {
+        "sop_name": sop.name,
+        "title": sop.title,
+        "version": sop.version,
+        "overview": sop.overview,
+        "total_steps": sop.total_steps,
+        "steps": [step.splitlines()[0].replace("### ", "") for step in sop.steps],
+    }
 
 
 # ── _merge_outputs unit tests ──────────────────────────────────────────

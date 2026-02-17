@@ -48,8 +48,6 @@ The regex enforcing this: `[a-z][a-z0-9]*(?:_[a-z0-9]+){2,}` — starts with a l
 
 ### Static tools (always registered)
 
-`explain_sop(sop_name?)` — No args lists all SOPs. With a name, returns full overview and step outline.
-
 `publish_sop(content, change_type)` — Validates markdown, auto-bumps version, writes to storage. Returns a reminder to restart the server. `change_type` is `major`, `minor`, or `patch`.
 
 `submit_sop_feedback(sop_name, feedback)` — Appends timestamped feedback to `{sop_name}/feedback.md`. Intended to be offered to the user after completing an SOP run.
