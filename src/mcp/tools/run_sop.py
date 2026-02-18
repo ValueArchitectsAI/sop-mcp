@@ -23,7 +23,7 @@ def execute_step(
     tool_name: str = "run_sop",
 ) -> dict[str, Any]:
     """Return the next step content or completion signal."""
-    sop = SOP(sop_name, version=version) if version else SOP(sop_name)
+    sop = SOP(sop_name, version=version, base_dir=backend.base_dir)
     total = sop.total_steps
 
     if current_step < 0 or current_step > total:
