@@ -1,169 +1,95 @@
-"""Dynamic SOP step-runner tool execution logic.
-
-Provides the handler factory and helpers used by the dynamically registered
-run_* SOP tools.  Registration happens in server.py.
-"""
+"""Start executing a Standard Operating Procedure."""
 
 import logging
 from typing import Annotated, Any, Literal
 
-from pydantic import Field
+from fastmcp.tools import tool
 
-from src.utils import SOP
+from src.utils import SOP, get_storage_backend
 
 logger = logging.getLogger(__name__)
 
+backend = get_storage_backend()
 
-def _build_step_instruction(
-    step_content: str,
+_available_sops = backend.list_sops()
+SopNameType = Literal[tuple(_available_sops)] if _available_sops else str
+
+
+def execute_step(
+    sop_name: str,
     current_step: int,
-    total_steps: int,
-    is_complete: bool,
-    sop: SOP | None = None,
-) -> str:
-    """Build the full instruction returned for a single SOP step.
+    version: str | None,
+    *,
+    tool_name: str = "run_sop",
+) -> dict[str, Any]:
+    """Return the next step content or completion signal."""
+    sop = SOP(sop_name, version=version) if version else SOP(sop_name)
+    total = sop.total_steps
 
-    Structure: [overview header] + step content + execution instruction.
-    """
-    parts: list[str] = []
+    if current_step < 0 or current_step > total:
+        raise ValueError(f"current_step must be 0–{total} for '{sop_name}' (v{sop.version}), got {current_step}")
 
-    if current_step == 1 and sop is not None:
-        parts.append(f"You are executing: {sop.title}\nTotal steps: {total_steps}\nOverview: {sop.overview}\n\n---\n")
+    response: dict[str, Any] = {
+        "sop_name": sop.name,
+        "sop_version": sop.version,
+        "current_step": current_step,
+        "total_steps": total,
+    }
 
-    parts.append(f"Step {current_step} of {total_steps}\n\n{step_content}\n")
-
-    if is_complete:
-        parts.append(
-            "---\n"
-            "EXECUTION INSTRUCTION: This is the LAST step of the SOP. Generate the concrete output\n"
-            "described above using realistic data. Then call this tool with "
-            f"completed_step_id={current_step}\n"
-            "and include your complete output in the step_output field. Your step_output MUST\n"
-            "contain specific values, not just field names or summaries.\n"
-            "\n"
-            "Include the `previous_outputs` from this response in your next tool call.\n"
-            "\n"
-            "Once done, ask the user if they'd like to provide feedback about this SOP via\n"
-            "the submit_sop_feedback tool.\n"
-        )
-    else:
-        parts.append(
-            "---\n"
-            "EXECUTION INSTRUCTION: Generate the concrete output described above using realistic\n"
-            f"data. Then call this tool with completed_step_id={current_step} and include your\n"
-            "complete output in the step_output field. Your step_output MUST contain specific\n"
-            "values, not just field names or summaries.\n"
-            "\n"
-            "Include the `previous_outputs` from this response in your next tool call.\n"
-        )
-
-    return "\n".join(parts)
-
-
-def _merge_outputs(
-    previous_outputs: dict[str, str] | None,
-    current_step: int | None,
-    step_output: str | None,
-) -> dict[str, str]:
-    """Merge step_output into previous_outputs under str(current_step).
-
-    Returns a new dict — never mutates the input.
-    """
-    merged = dict(previous_outputs) if previous_outputs else {}
-    if current_step is not None and step_output is not None:
-        merged[str(current_step)] = step_output
-    return merged
-
-
-def _create_sop_handler(sop: SOP, versions: list[str]):
-    """Create a handler function for an SOP tool.
-
-    Schema metadata (total_steps, version enum) is baked in from the SOP instance.
-    Version-specific content is loaded via SOP(name, version=...) at call time.
-    """
-    total_steps = sop.total_steps
-    sop_name = sop.name
-    latest_version = sop.version
-
-    StepType = Annotated[
-        int,
-        Field(
-            default=0,
-            ge=0,
-            le=total_steps,
-            description=f"The step to advance from. 0 to start, {total_steps} to complete.",
-        ),
-    ]
-
-    VersionType = Annotated[
-        Literal[tuple(versions)],
-        Field(
-            default=latest_version,
-            description=f"Semantic version. Available: {', '.join(versions)}. Defaults to {latest_version}.",
-        ),
-    ]
-
-    def handler(
-        current_step: StepType,
-        version: VersionType,
-        step_output: Annotated[
-            str,
-            "The concrete output you produced for the completed step. "
-            "Include all specific values, names, dates, and details.",
-        ]
-        | None = None,
-        previous_outputs: Annotated[
-            dict[str, str],
-            "Accumulated outputs from prior steps. Pass this field back from the previous response.",
-        ]
-        | None = None,
-    ) -> dict[str, Any]:
-        """Execute an SOP step by step."""
-        tool_name = f"run_{sop_name}"
-        logger.info("Invoking %s with args: current_step=%s, version=%s", tool_name, current_step, version)
-
-        loaded_sop = SOP(sop_name, version=version)
-
-        # Completion
-        if current_step == loaded_sop.total_steps:
-            logger.info("%s completed successfully", tool_name)
-            accumulated = _merge_outputs(previous_outputs, current_step, step_output)
-            completion_signal = (
-                "All steps complete. Now produce your FINAL COMPREHENSIVE DOCUMENT.\n\n"
-                "Use the `previous_outputs` field below to compile your final document.\n"
-                "Include all concrete values from every step.\n"
-                "Review the step_output you submitted for each step in this conversation.\n"
-                "Compile them into a single detailed document that includes ALL concrete values,\n"
-                "names, dates, numbers, and specifics from every step. Do not summarize — include\n"
-                "the full detail from each step's output."
-            )
-            response = {
-                "sop_name": loaded_sop.name,
-                "sop_version": loaded_sop.version,
-                "instruction": completion_signal,
-            }
-            if accumulated:
-                response["previous_outputs"] = accumulated
-            return response
-
-        # Return next step
-        next_step = current_step + 1
-        is_complete = next_step == loaded_sop.total_steps
-        accumulated = _merge_outputs(previous_outputs, current_step, step_output)
-        logger.info("%s completed successfully", tool_name)
-        response = {
-            "sop_name": loaded_sop.name,
-            "sop_version": loaded_sop.version,
-            "instruction": _build_step_instruction(
-                loaded_sop.steps[next_step - 1],
-                next_step,
-                loaded_sop.total_steps,
-                is_complete,
-                sop=loaded_sop if current_step == 0 else None,
-            ),
-        }
-        if accumulated:
-            response["previous_outputs"] = accumulated
+    if current_step == total:
+        response["instruction"] = "SOP execution complete."
         return response
 
-    return handler
+    next_step = current_step + 1
+    logger.info("run_sop(%s) step %d/%d", sop_name, next_step, total)
+
+    instruction = ""
+    if next_step == 1:
+        instruction += f"You are executing: {sop.title}\nTotal steps: {total}\nOverview: {sop.overview}\n\n---\n\n"
+    instruction += f"Step {next_step} of {total}\n\n{sop.steps[current_step]}"
+
+    is_last_step = next_step == total
+
+    instruction += "\n\n---\n\n"
+    instruction += "⚠️ EXECUTION RULES — YOU MUST FOLLOW THESE BEFORE ADVANCING:\n"
+    instruction += (
+        "1. You MUST fully execute ALL actions described in this step and produce the concrete expected output.\n"
+    )
+    instruction += f"2. You MUST NOT call {tool_name} to advance to the next step until you have completed this step.\n"
+    instruction += "3. You MUST NOT skip, summarize, or batch multiple steps together.\n"
+    instruction += (
+        f"4. Only after you have produced the expected output for this step "
+        f"may you call `{tool_name}` with current_step incremented.\n"
+    )
+
+    if is_last_step:
+        instruction += (
+            f"\n⚠️ THIS IS THE FINAL STEP ({next_step} of {total}). "
+            f"After completing it, you MUST call `{tool_name}` with `current_step={total}` "
+            "to finalize the SOP execution and receive the completion signal. "
+            "Do NOT skip this final call.\n"
+        )
+
+    response["instruction"] = instruction
+
+    return response
+
+
+@tool(
+    description=(
+        "Start or advance a Standard Operating Procedure step by step. "
+        "Use list_resources to discover available SOPs, then call this tool with the SOP name.\n\n"
+        "Each call returns one step. Execute the step, then call again with current_step "
+        "incremented to advance.\n\n"
+        "IMPORTANT: You MUST execute ALL actions described in the returned step content. "
+        "Do NOT just read or summarize the step — perform the actions using your available tools."
+    ),
+)
+def run_sop(
+    sop_name: Annotated[SopNameType, "Name of the SOP to execute."],
+    current_step: Annotated[int, "The step to advance from. 0 to start."] = 0,
+    version: Annotated[str | None, "Semantic version to run. Defaults to latest."] = None,
+) -> dict[str, Any]:
+    """Start or advance an SOP — returns the next step."""
+    logger.info("Invoking run_sop: sop_name=%s, current_step=%s, version=%s", sop_name, current_step, version)
+    return execute_step(sop_name, current_step, version)
