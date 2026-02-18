@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.0](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.6.0...v0.7.0) (2026-02-18)
+
+
+### Features
+
+* **resources:** Expose SOPs as MCP resources with text/markdown ([8188e2d](https://github.com/ValueArchitectsAI/sop-mcp/commit/8188e2d5e8e4833616608f35a5f0dc00ef94a6e1))
+* Upgrade from mcp SDK to FastMCP 3.0 ([07b46f3](https://github.com/ValueArchitectsAI/sop-mcp/commit/07b46f399bc435bd25dff1a192faba35d9bab939))
+
 ## [0.6.0](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.5.0...v0.6.0) (2026-02-16)
 
 
