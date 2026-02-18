@@ -27,16 +27,16 @@ Or add manually to any MCP client:
 
 ## Why?
 
-Agents tend to summarize or skip steps when given a full procedure. Feeding steps one at a time forces actual execution. Each SOP becomes a dedicated MCP tool (`run_<sop_name>`) that the agent discovers naturally in its tool list.
+Agents tend to summarize or skip steps when given a full procedure. Feeding steps one at a time forces actual execution. Each SOP becomes a dedicated MCP tool (`run_sop`) that the agent discovers naturally in its tool list.
 
 ## How It Works
 
 ```
-Agent calls run_sop_creation_guide()        → gets step 1 + instruction to execute
+Agent calls run_sop(sop_name="sop_creation_guide")           → gets step 1 + instruction to execute
 Agent executes step 1 actions
-Agent calls run_sop_creation_guide(current_step=1)  → gets step 2
+Agent calls run_sop(sop_name="sop_creation_guide", current_step=1, step_output="...")  → gets step 2
   ... repeats ...
-Agent calls run_sop_creation_guide(current_step=8)  → is_complete: true
+Agent calls run_sop(sop_name="sop_creation_guide", current_step=8, step_output="...")  → completion signal
 ```
 
 Every response includes an `instruction` field that tells the agent to *act*, not just read.
@@ -47,11 +47,25 @@ Every response includes an `instruction` field that tells the agent to *act*, no
 |------|-------------|
 | `publish_sop` | Publish a new or updated SOP with automatic semver bumping |
 | `submit_sop_feedback` | Submit improvement feedback for a specific SOP |
-| `run_<sop_name>` | Step-by-step execution of an SOP (one tool per SOP, registered dynamically) |
+| `run_sop` | Step-by-step execution of any SOP, with `sop_name` parameter |
+
+## Discovering SOPs
+
+SOPs are exposed as MCP resources, so agents can list and read them before starting execution.
+
+| Method | URI | Description |
+|--------|-----|-------------|
+| `list_resources` | — | Returns all available SOPs with name, version, step count, and overview |
+| `read_resource` | `sop://{sop_name}` | Read the full latest SOP markdown |
+| `read_resource` | `sop://{sop_name}?version=1.0` | Read a specific version |
+
+For clients that don't support the MCP resource protocol, resources are also exposed as tools automatically via `ResourcesAsTools`.
+
+This lets agents load the full SOP content upfront if needed — for example, to understand scope before committing to a multi-step run.
 
 ## Creating SOPs
 
-The built-in `run_sop_creation_guide` tool walks agents through the full authoring process:
+The built-in `sop_creation_guide` SOP walks agents through the full authoring process (call `run_sop` with `sop_name="sop_creation_guide"`):
 
 1. **Prepare** — gather process info, identify stakeholders, collect existing docs
 2. **Structure** — define metadata, scope, parameters, and document skeleton
@@ -62,71 +76,47 @@ The built-in `run_sop_creation_guide` tool walks agents through the full authori
 7. **Finalize** — incorporate feedback, publish via `publish_sop`, notify stakeholders
 8. **Maintain** — schedule reviews, collect feedback, keep the SOP current
 
-After publishing, restart the server to register the new `run_<sop_name>` tool.
+After publishing, restart the server to register the new SOP.
 
 ## The `step_output` Field
 
-Every `run_sop_*` tool accepts an optional `step_output` string parameter. This is where the LLM submits its concrete work product for the completed step — specific values, names, dates, and details rather than summaries.
+The `run_sop` tool accepts an optional `step_output` string parameter (required when `current_step >= 1`). This is where the LLM submits its concrete work product for the completed step — specific values, names, dates, and details rather than summaries.
 
 The server accepts `step_output` but does not store or process it. The field exists purely to force the LLM to produce detailed output that lands in the conversation's tool-call history. When all steps are complete, the LLM can reference its own `step_output` submissions to compile a comprehensive final document. State lives entirely in the LLM's conversation context, keeping the server stateless.
-
-## The `previous_outputs` Field
-
-### Why it exists
-
-A comparative study (360+ trials across 6 models) found that smaller models (Nova Lite, Ministral 14B) lose context from earlier steps by the time they reach the final compilation step. Instead of referencing the concrete values they generated — registration numbers, policy IDs, dates — they produce summaries of step names. The `previous_outputs` field solves this by giving the LLM an explicit, structured record of every prior step's output at every step.
-
-### How it works
-
-Every `run_sop_*` tool accepts an optional `previous_outputs` parameter: a JSON object mapping step number strings to the concrete output text produced for that step. The server merges the current `step_output` into this map (keyed by the current step number) and returns the updated map in the response.
-
-The server remains fully stateless. It does not store `previous_outputs` between calls. The client sends all accumulated outputs with each request, and the server echoes them back with the latest step merged in. All accumulation state lives in the request/response cycle.
 
 ### Request/response flow
 
 ```
-# Step 1: Initial call — no previous_outputs in request or response
-Agent calls run_sop(current_step=None)
-→ Response: Step 1 instruction (no previous_outputs field)
+# Step 1: Initial call — no step_output needed
+Agent calls run_sop(sop_name="my_sop")
+→ Response: Step 1 instruction
 
 # Step 2: Agent submits step 1 output
 Agent calls run_sop(
+    sop_name="my_sop",
     current_step=1,
-    step_output="Registration: VALID, Number: BRN-2024-0738291",
-    previous_outputs={}
+    step_output="Registration: VALID, Number: BRN-2024-0738291"
 )
-→ Response: Step 2 instruction + previous_outputs={
-    "1": "Registration: VALID, Number: BRN-2024-0738291"
-  }
+→ Response: Step 2 instruction
 
-# Step 3: Agent submits step 2 output, passes accumulated map
+# Step 3: Agent submits step 2 output
 Agent calls run_sop(
+    sop_name="my_sop",
     current_step=2,
-    step_output="Insurance: Hartford Financial, Policy: HFS-GL-4829173",
-    previous_outputs={"1": "Registration: VALID, Number: BRN-2024-0738291"}
+    step_output="Insurance: Hartford Financial, Policy: HFS-GL-4829173"
 )
-→ Response: Step 3 instruction + previous_outputs={
-    "1": "Registration: VALID, Number: BRN-2024-0738291",
-    "2": "Insurance: Hartford Financial, Policy: HFS-GL-4829173"
-  }
+→ Response: Step 3 instruction
 
 # Completion: Agent submits final step output
 Agent calls run_sop(
+    sop_name="my_sop",
     current_step=3,
-    step_output="Compliance: All checks passed, Certificate: CC-2024-9182",
-    previous_outputs={
-        "1": "Registration: VALID, Number: BRN-2024-0738291",
-        "2": "Insurance: Hartford Financial, Policy: HFS-GL-4829173"
-    }
+    step_output="Compliance: All checks passed, Certificate: CC-2024-9182"
 )
-→ Response: Completion signal + previous_outputs={
-    "1": "Registration: VALID, Number: BRN-2024-0738291",
-    "2": "Insurance: Hartford Financial, Policy: HFS-GL-4829173",
-    "3": "Compliance: All checks passed, Certificate: CC-2024-9182"
-  }
+→ Response: Completion signal
 ```
 
-At completion, the LLM uses the `previous_outputs` map to compile the final document with all concrete values — no reliance on conversation history needed.
+At completion, the LLM uses its conversation history of `step_output` submissions to compile the final document with all concrete values.
 
 ## Storage Configuration
 
@@ -180,7 +170,7 @@ New SOPs always start at v1.0.0.
 |---------|--------|---------|
 | Folder name | lowercase, underscores | `sop_creation_guide` |
 | Document ID | same as folder name | `sop_creation_guide` |
-| Tool name | `run_` + folder name | `run_sop_creation_guide` |
+| Tool name | `run_sop` with `sop_name=` folder name | `run_sop(sop_name="sop_creation_guide")` |
 | Version file | `v` + semver | `v1.0.0.md` |
 
 ## Development
@@ -202,7 +192,7 @@ sequenceDiagram
     participant Storage as Storage Backend<br/>(configurable)
 
     Note over Agent,Storage: Initialize
-    Agent->>Server: run_sop_creation_guide()
+    Agent->>Server: run_sop(sop_name="sop_creation_guide")
     Server->>Storage: Load latest version
     Storage-->>Server: SOP content
     Server-->>Agent: Step 1 + overview + instruction
@@ -210,13 +200,13 @@ sequenceDiagram
     Note over Agent,Storage: Execute Steps
     loop For each step
         Agent->>Agent: Execute step actions
-        Agent->>Server: run_sop_creation_guide(current_step=N)
+        Agent->>Server: run_sop(sop_name="sop_creation_guide", current_step=N, step_output="...")
         Server-->>Agent: Step N+1 + instruction
     end
 
     Note over Agent,Storage: Complete
-    Agent->>Server: run_sop_creation_guide(current_step=last)
-    Server-->>Agent: is_complete: true
+    Agent->>Server: run_sop(sop_name="sop_creation_guide", current_step=last, step_output="...")
+    Server-->>Agent: completion signal
 ```
 
 ## License

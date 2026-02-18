@@ -4,7 +4,7 @@ You are working on `sop-mcp`, an MCP server that walks AI agents through Standar
 
 ## What This Project Does
 
-SOPs are markdown documents with numbered steps. This server exposes each SOP as an MCP tool. When an agent calls the tool, it gets one step back. It must execute that step, then call the tool again to advance. The agent cannot skip ahead or see the full document at once.
+SOPs are markdown documents with numbered steps. This server exposes a single `run_sop` tool that accepts a `sop_name` parameter. When an agent calls the tool, it gets one step back. It must execute that step, then call the tool again with `step_output` to advance. The agent cannot skip ahead or see the full document at once.
 
 This matters because agents tend to summarize or skip steps when given a full procedure. Feeding steps one at a time forces actual execution.
 
@@ -37,7 +37,7 @@ Everything derives from the folder name. No mapping logic, no transformations.
 |---------|------|---------|
 | Folder | lowercase, underscores, min 3 words | `sop_creation_guide` |
 | Document ID | same as folder | `sop_creation_guide` |
-| Tool name | `run_` + folder | `run_sop_creation_guide` |
+| Tool name | `run_sop` with `sop_name=` folder | `run_sop(sop_name="sop_creation_guide")` |
 | Version file | `v` + semver + `.md` | `v1.0.md`, `v2.1.0.md` |
 
 The Document ID is declared in the markdown: `**Document ID**: sop_creation_guide`
@@ -52,29 +52,30 @@ The regex enforcing this: `[a-z][a-z0-9]*(?:_[a-z0-9]+){2,}` — starts with a l
 
 `submit_sop_feedback(sop_name, feedback)` — Appends timestamped feedback to `{sop_name}/feedback.md`. Intended to be offered to the user after completing an SOP run.
 
-### Dynamic tools (one per SOP, registered at startup)
+### Single unified tool
 
-`run_{folder_name}(current_step?, version?)` — Step-by-step execution.
+`run_sop(sop_name, current_step?, version?, step_output?)` — Step-by-step execution.
 
-- No args → returns step 1 + overview
-- `current_step=N` → returns step N+1 (meaning: "I finished step N, give me the next one")
-- `current_step=total` → returns last step with `is_complete: true`
+- `sop_name` + no other args → returns step 1 + overview
+- `current_step=N` + `step_output="..."` → returns step N+1 (meaning: "I finished step N, here's my output, give me the next one")
+- `current_step=total` + `step_output="..."` → returns completion signal
 - `version="1.0"` → pins to a specific version instead of latest
+- `step_output` is required when `current_step >= 1`, omit when starting
 
 Every response includes an `instruction` field that explicitly tells the agent to execute the step content, not just read it.
 
 ## Step Execution Flow
 
 ```
-Agent calls run_sop_creation_guide()
+Agent calls run_sop(sop_name="sop_creation_guide")
   → Server returns step 1 + overview + instruction
 Agent executes step 1 actions
-Agent calls run_sop_creation_guide(current_step=1)
+Agent calls run_sop(sop_name="sop_creation_guide", current_step=1, step_output="...")
   → Server returns step 2 + instruction
 Agent executes step 2 actions
   ... repeats ...
-Agent calls run_sop_creation_guide(current_step=8)
-  → Server returns step 8 with is_complete=true
+Agent calls run_sop(sop_name="sop_creation_guide", current_step=8, step_output="...")
+  → Server returns completion signal
 Agent summarizes, optionally asks user for feedback
 ```
 
@@ -209,11 +210,13 @@ uvx sop-mcp                # run via uvx (once published)
 
 ## Key Design Decisions
 
-1. **One tool per SOP** — SOPs appear in the agent's tool list, making them discoverable. No generic "run any SOP" tool that requires knowing names upfront.
+1. **Single `run_sop` tool** — A unified tool with a `sop_name` parameter. SOPs are discoverable via MCP resources.
 
 2. **Step-at-a-time** — Prevents agents from skipping or summarizing. The `instruction` field explicitly tells the agent to act, not read.
 
-3. **Folder = ID = tool suffix** — Zero mapping logic. Predictable: see folder `my_sop`, tool is `run_my_sop`.
+3. **Folder = ID** — Zero mapping logic. Predictable: see folder `my_sop`, use `sop_name="my_sop"`.
+
+4. **`step_output` forces concrete work** — When continuing (`current_step >= 1`), the agent must provide `step_output` with its concrete work product. The server doesn't store it — it exists to force detailed output into the conversation history.
 
 4. **Versions as files** — Git-friendly, no database, easy to inspect. Semver sorting by filename.
 
@@ -295,4 +298,4 @@ On every PR to `main` (from within the repo), a dev build is published to TestPy
 
 **Adding a storage backend**: Implement the `StorageBackend` protocol from `storage_backend.py`. Update `get_storage_backend()` in `storage_local.py` to select it.
 
-**Renaming an SOP**: Rename the folder in `src/sops/`, update the `**Document ID**:` field in the markdown to match. The tool name updates automatically on restart.
+**Renaming an SOP**: Rename the folder in `src/sops/`, update the `**Document ID**:` field in the markdown to match. The `sop_name` parameter value updates automatically on restart.

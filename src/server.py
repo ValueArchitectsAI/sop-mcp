@@ -15,7 +15,6 @@ from fastmcp.server.transforms import ResourcesAsTools
 from src.mcp.resources.sop_content import register_sop_resources
 from src.mcp.tools.publish_sop import EPHEMERAL_WARNING, publish_sop  # noqa: F401
 from src.mcp.tools.run_sop import run_sop  # noqa: F401
-from src.mcp.tools.run_sop_strict import run_sop_strict  # noqa: F401
 from src.mcp.tools.submit_sop_feedback import submit_sop_feedback  # noqa: F401
 from src.utils import get_storage_backend
 

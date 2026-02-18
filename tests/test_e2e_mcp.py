@@ -56,9 +56,7 @@ class TestToolDiscovery:
     async def test_no_per_sop_run_tools(self, client):
         tools = await client.list_tools()
         names = [t.name for t in tools]
-        per_sop = [
-            n for n in names if n.startswith("run_") and n not in ("run_sop", "run_sop_with_context", "run_sop_strict")
-        ]
+        per_sop = [n for n in names if n.startswith("run_") and n not in ("run_sop",)]
         assert per_sop == [], f"Expected no per-SOP run_ tools, found: {per_sop}"
 
 
@@ -146,16 +144,15 @@ class TestSopWorkflowRunThrough:
         data = await _call(client, "run_sop", {"sop_name": SOP_NAME})
         assert "instruction" in data
 
-        # Continue with run_sop_strict
+        # Continue with run_sop providing step_output
         for step in range(1, total):
             data = await _call(
                 client,
-                "run_sop_strict",
+                "run_sop",
                 {
                     "sop_name": SOP_NAME,
                     "current_step": step,
                     "step_output": f"Output for step {step}",
-                    "previous_outputs": data.get("previous_outputs", {}),
                 },
             )
             assert "instruction" in data
@@ -163,17 +160,15 @@ class TestSopWorkflowRunThrough:
         # Complete
         data = await _call(
             client,
-            "run_sop_strict",
+            "run_sop",
             {
                 "sop_name": SOP_NAME,
                 "current_step": total,
                 "step_output": f"Output for step {total}",
-                "previous_outputs": data.get("previous_outputs", {}),
             },
         )
         assert "instruction" in data
         assert "complete" in data["instruction"].lower()
-        assert "previous_outputs" in data
 
     async def test_walkthrough_with_explicit_version(self, client):
         data = await _call(client, "run_sop", {"sop_name": SOP_NAME, "version": "1.0"})
@@ -183,13 +178,12 @@ class TestSopWorkflowRunThrough:
         total = _get_total_steps()
         data = await _call(
             client,
-            "run_sop_strict",
+            "run_sop",
             {
                 "sop_name": SOP_NAME,
                 "version": "1.0",
                 "current_step": total,
                 "step_output": "Final output",
-                "previous_outputs": {},
             },
         )
         assert "instruction" in data
@@ -198,12 +192,11 @@ class TestSopWorkflowRunThrough:
 
     async def test_invalid_step_returns_error(self, client):
         result = await client.call_tool(
-            "run_sop_strict",
+            "run_sop",
             {
                 "sop_name": SOP_NAME,
                 "current_step": -1,
                 "step_output": "test",
-                "previous_outputs": {},
             },
             raise_on_error=False,
         )
@@ -212,12 +205,11 @@ class TestSopWorkflowRunThrough:
     async def test_step_beyond_total_returns_error(self, client):
         total = _get_total_steps()
         result = await client.call_tool(
-            "run_sop_with_context",
+            "run_sop",
             {
                 "sop_name": SOP_NAME,
                 "current_step": total + 1,
                 "step_output": "test",
-                "previous_outputs": {},
             },
             raise_on_error=False,
         )
@@ -229,4 +221,19 @@ class TestSopWorkflowRunThrough:
 
     async def test_unknown_sop_returns_error(self, client):
         result = await client.call_tool("run_sop", {"sop_name": "nonexistent_sop"}, raise_on_error=False)
+        assert result.is_error
+
+    async def test_run_sop_start_without_step_output(self, client):
+        """Starting a new run (current_step=0) should succeed without step_output."""
+        data = await _call(client, "run_sop", {"sop_name": SOP_NAME})
+        assert data["current_step"] == 0
+        assert "instruction" in data
+
+    async def test_run_sop_continue_requires_step_output(self, client):
+        """Continuing a run (current_step>=1) without step_output should error."""
+        result = await client.call_tool(
+            "run_sop",
+            {"sop_name": SOP_NAME, "current_step": 1},
+            raise_on_error=False,
+        )
         assert result.is_error
