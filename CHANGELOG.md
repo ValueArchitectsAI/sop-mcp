@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.7.0...v0.7.1) (2026-02-20)
+
+
+### Bug Fixes
+
+* **publish_sop:** Improve tool description and upgrade fastmcp to 3.0.0 ([#26](https://github.com/ValueArchitectsAI/sop-mcp/issues/26)) ([e4fdb81](https://github.com/ValueArchitectsAI/sop-mcp/commit/e4fdb81d34d68594d9bfae90ed77ba40117d34ce))
+
 ## [0.7.0](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.6.0...v0.7.0) (2026-02-18)
 
 
