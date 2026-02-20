@@ -27,9 +27,31 @@ EPHEMERAL_WARNING = (
 )
 
 
-@tool()
+@tool(
+    description=(
+        "Publish a new or updated Standard Operating Procedure document.\n\n"
+        "The content parameter MUST contain the complete SOP markdown string. "
+        "Pass the entire document as a single string value — do not omit it or pass an empty object.\n\n"
+        'Example call: {"content": "# My SOP\\n\\n## Document Information\\n- **Document ID**: '
+        "my_sop_name\\n- **Version**: 1.0.0\\n\\n## Overview\\nDescription.\\n\\n"
+        '### Step 1: First step\\nDo the thing.", "change_type": "minor"}\n\n'
+        "The SOP name is extracted from the Document ID field in the content. "
+        "The version is auto-bumped based on change_type. "
+        "New SOPs always start at v1.0.0."
+    ),
+)
 def publish_sop(
-    content: Annotated[str, Field(min_length=1, description="The full SOP markdown content to publish.")],
+    content: Annotated[
+        str,
+        Field(
+            min_length=1,
+            description=(
+                "The complete SOP markdown document as a string. "
+                "Must include: a # title, **Document ID** (lowercase_with_underscores, 3+ words), "
+                "**Version**, ## Overview section, and at least one ### Step N: section."
+            ),
+        ),
+    ],
     change_type: Annotated[
         ChangeType,
         Field(
@@ -38,9 +60,9 @@ def publish_sop(
         ),
     ] = ChangeType.MINOR,
 ) -> dict[str, Any]:
-    """Publish a new or updated Standard Operating Procedure document.
+    """Publish a new or updated SOP document.
 
-    The SOP name is extracted from the content (expected format: SOP-WORD-WORD-WORD).
+    The SOP name is extracted from the content (the Document ID field).
     The version is auto-bumped based on the change_type using semantic versioning.
     For brand-new SOPs the initial version is 1.0.0 regardless of change_type.
     """
