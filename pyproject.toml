@@ -20,7 +20,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-    "fastmcp>=3.0.0rc1",
+    "fastmcp>=3.0.0",
 ]
 
 [project.urls]
