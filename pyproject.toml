@@ -30,7 +30,7 @@ Issues = "https://github.com/ValueArchitectsAI/sop-mcp/issues"
 
 [dependency-groups]
 dev = [
-    "hypothesis>=6.0.0,<6.123.0",
+    "hypothesis>=6.0.0,<6.152.0",
     "pytest>=8.0.0",
     "pytest-asyncio>=1.0.0",
     "pyyaml>=6.0.3",
@@ -69,7 +69,7 @@ env_list = ["py310", "py311", "py312", "py313", "lint"]
 [tool.tox.env_run_base]
 description = "Run tests"
 deps = [
-    "hypothesis>=6.0.0,<6.123.0",
+    "hypothesis>=6.0.0,<6.152.0",
     "pytest>=8.0.0",
     "pytest-asyncio>=1.0.0",
     "pyyaml>=6.0.3",
