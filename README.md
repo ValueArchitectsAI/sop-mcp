@@ -146,14 +146,26 @@ Bundled SOPs are automatically seeded into the custom directory on first run.
 
 ### S3 Storage
 
-For cloud-based persistence with automatic synchronization across instances (ideal for Lambda or containerized deployments):
+For cloud-based persistence with automatic synchronization across instances (ideal for Lambda or containerized deployments).
+
+**Installation:** S3 support requires the optional `s3` extras:
+
+```bash
+# With pip
+pip install sop-mcp[s3]
+
+# With uvx (for MCP clients)
+uvx --with sop-mcp[s3] sop-mcp
+```
+
+**Configuration:**
 
 ```json
 {
   "mcpServers": {
     "sop-mcp": {
       "command": "uvx",
-      "args": ["sop-mcp[s3]"],
+      "args": ["--with", "sop-mcp[s3]", "sop-mcp"],
       "env": {
         "SOP_STORAGE_TYPE": "s3",
         "SOP_S3_BUCKET": "your-bucket-name",
