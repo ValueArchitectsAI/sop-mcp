@@ -45,6 +45,19 @@ class LocalFilesystemBackend:
         if seed_dir is not None:
             self._seed(seed_dir)
 
+    @classmethod
+    def from_env(cls) -> LocalFilesystemBackend:
+        """Create from environment variables.
+
+        ``SOP_STORAGE_DIR`` → use that path, seed from bundled, not ephemeral.
+        Otherwise → use bundled directory, marked ephemeral.
+        """
+        storage_dir = os.environ.get("SOP_STORAGE_DIR", "").strip()
+        if storage_dir:
+            base_dir = _validate_storage_path(storage_dir)
+            return cls(base_dir=base_dir, is_ephemeral=False, seed_dir=BUNDLED_SOPS_DIR)
+        return cls(base_dir=BUNDLED_SOPS_DIR, is_ephemeral=True)
+
     @property
     def base_dir(self) -> Path:
         return self._base_dir
@@ -209,30 +222,3 @@ def _validate_storage_path(path_str: str) -> Path:
     if "\x00" in path_str:
         raise ValueError("Storage directory path must not contain null bytes")
     return Path(path_str)
-
-
-def get_storage_backend() -> LocalFilesystemBackend:
-    """Create and return the appropriate storage backend based on configuration.
-
-    Resolution order:
-
-    1. ``SOP_STORAGE_DIR`` is set  →  use that path, seed from bundled,
-       not ephemeral.
-    2. Otherwise  →  use the bundled ``src/sops/`` directory directly,
-       marked as ephemeral (data may be lost on package cache refresh).
-    """
-    storage_dir_env = os.environ.get("SOP_STORAGE_DIR", "").strip()
-
-    if storage_dir_env:
-        base_dir = _validate_storage_path(storage_dir_env)
-        return LocalFilesystemBackend(
-            base_dir=base_dir,
-            is_ephemeral=False,
-            seed_dir=BUNDLED_SOPS_DIR,
-        )
-
-    # Default: bundled directory, always ephemeral until a persistent path is configured
-    return LocalFilesystemBackend(
-        base_dir=BUNDLED_SOPS_DIR,
-        is_ephemeral=True,
-    )

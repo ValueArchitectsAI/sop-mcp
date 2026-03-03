@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.utils.storage_local import BUNDLED_SOPS_DIR, get_storage_backend
+from src.utils.storage_backend import get_storage_backend
+from src.utils.storage_local import BUNDLED_SOPS_DIR
 
 
 class TestStorageConfiguration:
