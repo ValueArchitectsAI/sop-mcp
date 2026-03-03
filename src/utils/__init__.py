@@ -18,7 +18,8 @@ __all__ = [
 
 # Conditionally import S3StorageBackend only if boto3 is available
 try:
-    from .storage_s3 import S3StorageBackend
+    from .storage_s3 import S3StorageBackend  # noqa: F401
+
     __all__.append("S3StorageBackend")
 except ImportError:
     pass

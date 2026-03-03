@@ -16,9 +16,10 @@ import pytest
 boto3 = pytest.importorskip("boto3", reason="boto3 not installed (install with: pip install sop-mcp[s3])")
 moto = pytest.importorskip("moto", reason="moto not installed")
 
-from moto import mock_aws
+# Import after pytest.importorskip to avoid E402
+from moto import mock_aws  # noqa: E402
 
-from src.utils.storage_s3 import S3StorageBackend
+from src.utils.storage_s3 import S3StorageBackend  # noqa: E402
 
 # --- Fixtures ---
 
