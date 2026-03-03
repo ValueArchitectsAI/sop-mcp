@@ -10,8 +10,12 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import boto3
 import pytest
+
+# Skip all tests in this module if boto3 is not available
+boto3 = pytest.importorskip("boto3", reason="boto3 not installed (install with: pip install sop-mcp[s3])")
+moto = pytest.importorskip("moto", reason="moto not installed")
+
 from moto import mock_aws
 
 from src.utils.storage_s3 import S3StorageBackend
