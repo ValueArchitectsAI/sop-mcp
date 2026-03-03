@@ -22,4 +22,6 @@ try:
 
     __all__.append("S3StorageBackend")
 except ImportError:
+    # Optional dependency (e.g., boto3 or related S3 support) is not available;
+    # S3StorageBackend will simply not be exposed via this package.
     pass
