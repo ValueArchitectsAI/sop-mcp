@@ -2,12 +2,12 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from fastmcp.tools import tool
 from pydantic import Field
 
-from src.utils import SOP, get_storage_backend
+from src.utils import SOP
 
 logger = logging.getLogger(__name__)
 
@@ -25,14 +25,10 @@ EPHEMERAL_WARNING = (
     "variable to a persistent path to avoid data loss."
 )
 
-# Use get_storage_backend() directly for schema generation (avoids circular import)
-_available_sops = get_storage_backend().list_sops()
-_SopNameType = Literal[tuple(_available_sops)] if _available_sops else str
-
 
 @tool()
 def submit_sop_feedback(
-    sop_name: Annotated[_SopNameType, Field(description=f"Name of the SOP. Available: {', '.join(_available_sops)}.")],
+    sop_name: Annotated[str, Field(description="Name of the SOP.")],
     feedback: Annotated[str, Field(min_length=1, description="The improvement suggestion or feedback text.")],
 ) -> dict[str, Any]:
     """Submit improvement feedback for a specific SOP.
@@ -42,6 +38,9 @@ def submit_sop_feedback(
     in its next revision.
     """
     logger.info("Invoking submit_sop_feedback with args: sop_name=%s, feedback=<%s chars>", sop_name, len(feedback))
+
+    if not _get_backend().sop_exists(sop_name):
+        raise ValueError(f"SOP '{sop_name}' not found. Available: {', '.join(_get_backend().list_sops())}")
 
     content = _get_backend().read_sop(sop_name)
     sop = SOP.from_content(content)

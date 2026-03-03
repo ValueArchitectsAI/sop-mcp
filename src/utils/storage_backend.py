@@ -56,3 +56,26 @@ class StorageBackend(Protocol):
     def append_feedback(self, name: str, entry: str) -> None:
         """Append a feedback entry to the SOP's feedback file."""
         ...
+
+
+def get_storage_backend() -> StorageBackend:
+    """Create and return the appropriate storage backend.
+
+    Uses ``SOP_STORAGE_TYPE`` to select the backend (default: ``local``).
+    Each backend loads its own required configuration from env vars.
+    """
+    import os
+
+    storage_type = os.environ.get("SOP_STORAGE_TYPE", "local").strip().lower()
+
+    if storage_type == "s3":
+        from .storage_s3 import S3StorageBackend
+
+        return S3StorageBackend.from_env()
+
+    if storage_type == "local":
+        from .storage_local import LocalFilesystemBackend
+
+        return LocalFilesystemBackend.from_env()
+
+    raise ValueError(f"Unknown SOP_STORAGE_TYPE: '{storage_type}'. Supported: local, s3")

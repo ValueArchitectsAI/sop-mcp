@@ -1,7 +1,7 @@
 """Start or advance a Standard Operating Procedure."""
 
 import logging
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from fastmcp.tools import tool
 
@@ -10,9 +10,6 @@ from src.utils import SOP, get_storage_backend
 logger = logging.getLogger(__name__)
 
 backend = get_storage_backend()
-
-_available_sops = backend.list_sops()
-SopNameType = Literal[tuple(_available_sops)] if _available_sops else str
 
 
 @tool(
@@ -28,7 +25,7 @@ SopNameType = Literal[tuple(_available_sops)] if _available_sops else str
     ),
 )
 def run_sop(
-    sop_name: Annotated[SopNameType, "Name of the SOP to execute."],
+    sop_name: Annotated[str, "Name of the SOP to execute."],
     current_step: Annotated[int, "The step to advance from. 0 to start."] = 0,
     version: Annotated[str | None, "Semantic version to run. Defaults to latest."] = None,
     step_output: Annotated[
@@ -40,6 +37,9 @@ def run_sop(
 ) -> dict[str, Any]:
     """Start or advance an SOP — returns the next step."""
     logger.info("Invoking run_sop: sop_name=%s, current_step=%s, version=%s", sop_name, current_step, version)
+
+    if not backend.sop_exists(sop_name):
+        raise ValueError(f"SOP '{sop_name}' not found. Available: {', '.join(backend.list_sops())}")
 
     if current_step >= 1 and not step_output:
         raise ValueError(
