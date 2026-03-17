@@ -10,7 +10,7 @@ import string
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from src.utils.storage_local import LocalFilesystemBackend
+from src.utils.storage import LocalFilesystemBackend
 
 # --- Strategies ---
 
@@ -110,7 +110,7 @@ def test_path_validation_rejects_invalid_paths(path_str: str) -> None:
     _validate_storage_path should raise ValueError."""
     import pytest
 
-    from src.utils.storage_local import _validate_storage_path
+    from src.utils.storage import _validate_storage_path
 
     with pytest.raises(ValueError):
         _validate_storage_path(path_str)
@@ -181,13 +181,19 @@ def test_ephemeral_warning_iff_ephemeral_backend(
     """For any SOP content published or feedback submitted, the response
     contains an ephemeral storage warning if and only if the underlying
     StorageBackend.is_ephemeral is True."""
+    import src.mcp.tools.publish_sop as publish_module
+    import src.mcp.tools.submit_sop_feedback as feedback_module
     import src.server as server_module
 
     base_dir = tmp_path_factory.mktemp("sops")
     test_backend = LocalFilesystemBackend(base_dir=base_dir, is_ephemeral=is_ephemeral)
 
-    original_backend = server_module.backend
+    original_server_backend = server_module.backend
+    original_feedback_backend = feedback_module.backend
+    original_publish_get_backend = publish_module._get_backend
     server_module.backend = test_backend
+    feedback_module.backend = test_backend
+    publish_module._get_backend = lambda: test_backend
     try:
         content = _build_sop_content(doc_id, overview, step_body)
 
@@ -211,4 +217,6 @@ def test_ephemeral_warning_iff_ephemeral_backend(
         else:
             assert server_module.EPHEMERAL_WARNING not in feedback_result.get("warning", "")
     finally:
-        server_module.backend = original_backend
+        server_module.backend = original_server_backend
+        feedback_module.backend = original_feedback_backend
+        publish_module._get_backend = original_publish_get_backend

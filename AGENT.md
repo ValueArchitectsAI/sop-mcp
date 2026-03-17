@@ -21,12 +21,16 @@ src/
     ├── __init__.py            # re-exports
     ├── sop_parser.py          # SOP class, markdown parsing, versioning
     ├── storage_backend.py     # StorageBackend protocol (interface)
-    └── storage_local.py       # LocalFilesystemBackend implementation
+    └── storage.py             # LocalFilesystemBackend implementation
+├── hook_middleware.py         # FastMCP middleware for hook events
+└── mcp/
+    └── hooks.py               # HookRegistry, HookExecutor, handlers
 
 tests/
 ├── test_handler.py            # server tool tests (async, FastMCP)
 ├── test_parser.py             # parser unit tests
-└── test_storage_backend.py    # property-based storage tests (hypothesis)
+├── test_storage_backend.py    # property-based storage tests (hypothesis)
+└── test_e2e_hooks.py          # end-to-end hook tests via MCP transport
 ```
 
 ## Naming Convention
@@ -90,7 +94,7 @@ On the final step, it also prompts the agent to offer the user a chance to submi
 
 ## Storage Architecture
 
-The server uses a `StorageBackend` protocol (defined in `storage_backend.py`) with a single implementation: `LocalFilesystemBackend` (in `storage_local.py`).
+The server uses a `StorageBackend` protocol (defined in `storage_backend.py`) with a single implementation: `LocalFilesystemBackend` (in `storage.py`).
 
 ### Resolution order
 
@@ -296,6 +300,6 @@ On every PR to `main` (from within the repo), a dev build is published to TestPy
 
 **Changing SOP parsing**: Edit `sop_parser.py`. The `_parse_content()` function is the entry point. Each field has its own `_extract_*` function.
 
-**Adding a storage backend**: Implement the `StorageBackend` protocol from `storage_backend.py`. Update `get_storage_backend()` in `storage_local.py` to select it.
+**Adding a storage backend**: Implement the `StorageBackend` protocol from `storage_backend.py`. Update `get_storage_backend()` in `storage.py` to select it.
 
 **Renaming an SOP**: Rename the folder in `src/sops/`, update the `**Document ID**:` field in the markdown to match. The `sop_name` parameter value updates automatically on restart.

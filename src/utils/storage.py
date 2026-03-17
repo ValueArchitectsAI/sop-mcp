@@ -6,11 +6,14 @@ against a configurable directory on the local filesystem.
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 from pathlib import Path
 
 from .sop_parser import _parse_semver
+
+logger = logging.getLogger(__name__)
 
 # Directory containing the SOPs bundled with the package.
 BUNDLED_SOPS_DIR = Path(__file__).parent.parent / "mcp" / "resources"
@@ -97,8 +100,6 @@ class LocalFilesystemBackend:
         sop_dir = self._base_dir / name
         sop_dir.mkdir(parents=True, exist_ok=True)
         (sop_dir / f"v{version}.md").write_text(content, encoding="utf-8")
-
-    # --- Listing ---
 
     def list_sops(self) -> list[str]:
         """Return sorted list of SOP names that have at least one versioned file."""

@@ -5,11 +5,12 @@ from typing import Annotated, Any
 
 from fastmcp.tools import tool
 
-from src.utils import SOP, get_storage_backend
+from src.utils import SOP
+from src.utils.storage import LocalFilesystemBackend
 
 logger = logging.getLogger(__name__)
 
-backend = get_storage_backend()
+backend = LocalFilesystemBackend.from_env()
 
 
 @tool(
