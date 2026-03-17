@@ -92,4 +92,19 @@ class HookMiddleware(Middleware):
             except (ValueError, TypeError):
                 pass
 
+        # Inject any LLM suggestions collected during this call into the response
+        if executor.suggested_actions:
+            suggestions = list(executor.suggested_actions)
+            executor.suggested_actions.clear()
+            try:
+                import json as _json
+
+                from mcp.types import TextContent
+
+                result_data["suggested_actions"] = suggestions
+                result.content = [TextContent(type="text", text=_json.dumps(result_data))]
+                logger.info("Injected %d suggested_action(s) into response", len(suggestions))
+            except Exception as e:
+                logger.warning("Failed to inject suggested_actions into response: %s", e)
+
         return result

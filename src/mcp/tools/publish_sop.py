@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class Scope(Enum):
     """Scope of an SOP document."""
-    
+
     PERSONAL = "personal"
     SHARED = "shared"
 
@@ -72,7 +72,7 @@ def publish_sop(
         Scope,
         Field(
             default=Scope.PERSONAL,
-            description="Scope of the SOP: 'personal' for user-specific SOPs published privately, 'shared' for team-wide SOPs",
+            description="Scope: 'personal' for user-specific SOPs, 'shared' for team-wide SOPs",
         ),
     ] = Scope.PERSONAL,
 ) -> dict[str, Any]:
@@ -82,8 +82,12 @@ def publish_sop(
     The version is auto-bumped based on the change_type using semantic versioning.
     For brand-new SOPs the initial version is 1.0.0 regardless of change_type.
     """
-    logger.info("Invoking publish_sop with args: content=<%s chars>, change_type=%s, scope=%s", 
-                len(content), change_type.value, scope.value)
+    logger.info(
+        "Invoking publish_sop with args: content=<%s chars>, change_type=%s, scope=%s",
+        len(content),
+        change_type.value,
+        scope.value,
+    )
 
     try:
         sop = SOP.from_content(content)

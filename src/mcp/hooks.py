@@ -38,6 +38,7 @@ def hooks_enabled() -> bool:
     """Check whether the hook system should be active.
 
     Hooks are enabled when `SOP_HOOK_CONFIG` is set to a non-empty value.
+    The value can be either a JSON string or a file path ending with '.json'.
     `SOP_HOOKS_ENABLED` is no longer required — having a config is sufficient.
 
     Returns:
@@ -48,19 +49,31 @@ def hooks_enabled() -> bool:
 
 
 def parse_hook_config(config_str: str) -> List[CallbackDefinition]:
-    """Parse hook configuration from JSON string into CallbackDefinition objects.
+    """Parse hook configuration from JSON string or file path into CallbackDefinition objects.
+
+    If config_str ends with '.json', it's treated as a file path and read from disk.
+    Otherwise, it's parsed as a JSON string.
 
     Validates JSON structure and required fields (`event_type`, `action_type`, `payload`).
     Handles malformed JSON gracefully by returning an empty list.
     Performs security validation on callbacks.
 
     Args:
-        config_str: JSON string containing hook configuration
+        config_str: JSON string or file path ending with '.json' containing hook configuration
 
     Returns:
         List of valid CallbackDefinition objects. Returns empty list if JSON is malformed
         or contains no valid definitions.
     """
+    # Check if config_str is a file path (ends with .json)
+    if config_str.strip().endswith('.json'):
+        try:
+            with open(config_str.strip(), 'r', encoding='utf-8') as f:
+                config_str = f.read()
+        except (OSError, IOError) as e:
+            logging.warning(f"Failed to read hook config file '{config_str}': {e}")
+            return []
+    
     # Enforce 64KB maximum for hook configuration (Requirement 4.2)
     if len(config_str) > 64 * 1024:
         logging.warning("Hook configuration exceeds 64KB limit. Discarding.")

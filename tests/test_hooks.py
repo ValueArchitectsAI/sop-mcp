@@ -1,14 +1,11 @@
 import json
 import os
-import sys
 from unittest.mock import MagicMock, patch
 
 from hypothesis import given
 from hypothesis import strategies as st
 
-# Add current directory to path to allow importing hooks module
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from hooks import (
+from src.mcp.hooks import (
     CallbackDefinition,
     HookRegistry,
     ShellHandler,
@@ -109,6 +106,54 @@ def test_parse_hook_config_payload_not_dict() -> None:
 
 def test_parse_hook_config_empty_string() -> None:
     assert parse_hook_config("") == []
+
+
+# ── File-based config tests ──────────────────────────────────────────
+
+EXAMPLES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs", "examples")
+
+
+def test_parse_hook_config_from_shell_file() -> None:
+    """parse_hook_config accepts a .json file path — shell example."""
+    path = os.path.join(EXAMPLES_DIR, "shell.hook.json")
+    result = parse_hook_config(path)
+    assert len(result) > 0
+    action_types = {cb.action_type for cb in result}
+    assert action_types == {"shell"}
+
+
+def test_parse_hook_config_from_webhook_file() -> None:
+    """parse_hook_config accepts a .json file path — webhook example."""
+    path = os.path.join(EXAMPLES_DIR, "webhook.hook.json")
+    result = parse_hook_config(path)
+    assert len(result) > 0
+    action_types = {cb.action_type for cb in result}
+    assert action_types == {"webhook"}
+
+
+def test_parse_hook_config_from_llm_file() -> None:
+    """parse_hook_config accepts a .json file path — llm example."""
+    path = os.path.join(EXAMPLES_DIR, "llm.hook.json")
+    result = parse_hook_config(path)
+    assert len(result) > 0
+    action_types = {cb.action_type for cb in result}
+    assert action_types == {"llm"}
+
+
+def test_parse_hook_config_from_mixed_file() -> None:
+    """parse_hook_config accepts a .json file path — mixed example."""
+    path = os.path.join(EXAMPLES_DIR, "mixed.hook.json")
+    result = parse_hook_config(path)
+    assert len(result) > 0
+    action_types = {cb.action_type for cb in result}
+    assert "shell" in action_types
+    assert "webhook" in action_types
+
+
+def test_parse_hook_config_missing_file() -> None:
+    """parse_hook_config returns empty list for a non-existent file path."""
+    result = parse_hook_config("/nonexistent/path/hooks.json")
+    assert result == []
 
 
 def test_parse_hook_config_partial_valid_entries() -> None:

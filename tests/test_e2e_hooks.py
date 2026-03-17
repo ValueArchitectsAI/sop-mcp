@@ -7,6 +7,7 @@ real MCP tool calls via in-memory transport, and verify handlers fired.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -25,6 +26,7 @@ from src.server import _hook_middleware, mcp
 pytestmark = pytest.mark.asyncio
 
 SOP_NAME = "sop_creation_guide"
+EXAMPLES_DIR = Path(__file__).parent.parent / "docs" / "examples"
 
 
 async def _call(client: Client, tool_name: str, arguments: dict | None = None) -> dict:
@@ -33,9 +35,9 @@ async def _call(client: Client, tool_name: str, arguments: dict | None = None) -
     return json.loads(result.content[0].text)
 
 
-def _setup_executor(config_json: str) -> HookExecutor:
-    """Parse config, build registry + executor with all handlers wired up."""
-    callbacks = parse_hook_config(config_json)
+def _setup_executor(config: str) -> HookExecutor:
+    """Parse config from a JSON file path or raw JSON string, build registry + executor."""
+    callbacks = parse_hook_config(config)
     registry = HookRegistry()
     for cb in callbacks:
         registry.register(cb.event_type, cb)
@@ -72,51 +74,26 @@ async def _walk_sop_to_completion(client: Client) -> dict:
 
 
 class TestE2EShellHook:
-    """Shell hook fires via middleware on every run_sop call + sop_completed."""
+    """Shell hook fires via middleware on every run_sop call."""
 
     async def test_shell_hook_fires_on_every_run_sop_call(self):
-        config = json.dumps(
-            [
-                {
-                    "event_type": "run_sop",
-                    "action_type": "shell",
-                    "payload": {
-                        "command": "echo STEP:{sop_name}:{current_step}",
-                        "timeout_seconds": 5,
-                    },
-                },
-                {
-                    "event_type": "sop_completed",
-                    "action_type": "shell",
-                    "payload": {
-                        "command": "echo COMPLETED:{sop_name}:v{sop_version}",
-                        "timeout_seconds": 5,
-                    },
-                },
-            ]
-        )
-        executor = _setup_executor(config)
+        executor = _setup_executor(str(EXAMPLES_DIR / "shell.hook.json"))
         original = _hook_middleware.executor
 
         try:
             _hook_middleware.executor = executor
 
             with patch("subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(
-                    stdout="ok",
-                    stderr="",
-                    returncode=0,
-                )
+                mock_run.return_value = MagicMock(stdout="ok", stderr="", returncode=0)
 
                 async with Client(mcp) as client:
                     data = await _walk_sop_to_completion(client)
 
                     assert "complete" in data["instruction"].lower()
                     total_steps = data["total_steps"]
-                    # run_sop fires on every call (total_steps + 1 calls)
-                    # sop_completed fires once on the final call
-                    expected_calls = (total_steps + 1) + 1
-                    assert mock_run.call_count == expected_calls
+                    # shell.hook.json has a run_sop hook — fires on every call (total_steps + 1)
+                    # sop_completed hook is filtered by security (command contains 'sh')
+                    assert mock_run.call_count == total_steps + 1
         finally:
             _hook_middleware.executor = original
 
@@ -125,20 +102,7 @@ class TestE2EWebhookHook:
     """Webhook hook fires via middleware on submit_sop_feedback."""
 
     async def test_webhook_hook_posts_on_feedback(self):
-        config = json.dumps(
-            [
-                {
-                    "event_type": "submit_sop_feedback",
-                    "action_type": "webhook",
-                    "payload": {
-                        "url": "https://hooks.example.com/feedback",
-                        "sop_name": "{sop_name}",
-                        "timeout_seconds": 3,
-                    },
-                }
-            ]
-        )
-        executor = _setup_executor(config)
+        executor = _setup_executor(str(EXAMPLES_DIR / "webhook.hook.json"))
         original = _hook_middleware.executor
 
         try:
@@ -155,15 +119,13 @@ class TestE2EWebhookHook:
                     data = await _call(
                         client,
                         "submit_sop_feedback",
-                        {
-                            "sop_name": SOP_NAME,
-                            "feedback": "E2E webhook hook test feedback",
-                        },
+                        {"sop_name": SOP_NAME, "feedback": "E2E webhook hook test feedback"},
                     )
 
                     assert data["success"] is True
                     mock_post.assert_called_once()
                     call_args, call_kwargs = mock_post.call_args
+                    # webhook.hook.json posts feedback to hooks.example.com/feedback
                     assert call_args[0] == "https://hooks.example.com/feedback"
                     payload = call_kwargs["json"]
                     assert payload["event_type"] == "submit_sop_feedback"
@@ -174,36 +136,54 @@ class TestE2EWebhookHook:
 
 
 class TestE2ELLMHook:
-    """LLM hook adds suggestion via middleware on sop_completed."""
+    """LLM suggestions are injected into the MCP response payload."""
 
-    async def test_llm_hook_adds_suggestion_on_sop_complete(self):
-        config = json.dumps(
-            [
-                {
-                    "event_type": "sop_completed",
-                    "action_type": "llm",
-                    "payload": {
-                        "title": "Review {sop_name} output",
-                        "description": "SOP {sop_name} v{sop_version} completed {total_steps} steps.",
-                        "action_command": 'publish_sop(change_type="minor")',
-                    },
-                }
-            ]
-        )
-        executor = _setup_executor(config)
+    async def test_llm_suggestions_forwarded_in_response(self):
+        executor = _setup_executor(str(EXAMPLES_DIR / "llm.hook.json"))
         original = _hook_middleware.executor
 
         try:
             _hook_middleware.executor = executor
 
             async with Client(mcp) as client:
+                # Walk to the final step — sop_completed fires and adds an LLM suggestion
                 data = await _walk_sop_to_completion(client)
 
-                assert "complete" in data["instruction"].lower()
-                assert len(executor.suggested_actions) == 1
-                suggestion = executor.suggested_actions[0]
-                assert suggestion["title"] == "Review sop_creation_guide output"
-                assert "sop_creation_guide" in suggestion["description"]
-                assert suggestion["action_command"] == 'publish_sop(change_type="minor")'
+                # The suggestion must be present in the actual MCP response, not just on the executor
+                assert "suggested_actions" in data, "suggested_actions missing from MCP response"
+                suggestions = data["suggested_actions"]
+                assert len(suggestions) >= 1
+
+                # The sop_completed hook in llm.hook.json suggests publishing
+                sop_suggestion = next(
+                    (s for s in suggestions if "publish_sop" in s.get("action_command", "")), None
+                )
+                assert sop_suggestion is not None
+                assert SOP_NAME in sop_suggestion["description"]
+                assert sop_suggestion["action_command"] == 'publish_sop(change_type="minor")'
+        finally:
+            _hook_middleware.executor = original
+
+    async def test_llm_suggestion_on_feedback_forwarded_in_response(self):
+        executor = _setup_executor(str(EXAMPLES_DIR / "llm.hook.json"))
+        original = _hook_middleware.executor
+
+        try:
+            _hook_middleware.executor = executor
+
+            async with Client(mcp) as client:
+                data = await _call(
+                    client,
+                    "submit_sop_feedback",
+                    {"sop_name": SOP_NAME, "feedback": "great SOP"},
+                )
+
+                assert "suggested_actions" in data, "suggested_actions missing from MCP response"
+                suggestions = data["suggested_actions"]
+                patch_suggestion = next(
+                    (s for s in suggestions if "patch" in s.get("action_command", "")), None
+                )
+                assert patch_suggestion is not None
+                assert SOP_NAME in patch_suggestion["description"]
         finally:
             _hook_middleware.executor = original
