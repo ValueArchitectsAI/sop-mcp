@@ -1,0 +1,37 @@
+- event_type: run_sop
+  action_type: llm
+  payload:
+    title: "Step Progress"
+    description: |
+      SOP {sop_name} v{sop_version} is at step {current_step}/{total_steps}.
+      Review the current step carefully before proceeding.
+      Ensure all required actions are completed before advancing.
+
+- event_type: sop_completed
+  action_type: llm
+  payload:
+    title: "Review SOP Output"
+    description: |
+      SOP {sop_name} v{sop_version} completed all {total_steps} steps.
+      Consider reviewing the full output for quality and completeness.
+      If changes are needed, publish a new minor version.
+    action_command: 'publish_sop(change_type="minor")'
+
+- event_type: submit_sop_feedback
+  action_type: llm
+  payload:
+    title: "Feedback Received"
+    description: |
+      Feedback was submitted for {sop_name} v{sop_version}.
+      Consider incorporating the feedback into the next revision.
+      A patch version bump is recommended for minor corrections.
+    action_command: 'publish_sop(change_type="patch")'
+
+- event_type: publish_sop
+  action_type: llm
+  payload:
+    title: "New SOP Version Published"
+    description: |
+      SOP {sop_name} v{version} was published ({change_type}).
+      Consider notifying stakeholders of the update.
+      Update any dependent workflows that reference this SOP.

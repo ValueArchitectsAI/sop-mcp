@@ -7,7 +7,9 @@ from hypothesis import strategies as st
 
 from src.mcp.hooks import (
     CallbackDefinition,
+    HookExecutor,
     HookRegistry,
+    LLMSuggestionHandler,
     ShellHandler,
     WebhookHandler,
     parse_hook_config,
@@ -315,3 +317,161 @@ def test_webhook_handler_missing_sop_name() -> None:
 
 
 # ── LLM suggestion handler tests ─────────────────────────────────────
+
+
+# ── YAML config tests ────────────────────────────────────────────────
+
+
+def test_parse_hook_config_yaml_string() -> None:
+    """parse_hook_config accepts a YAML string."""
+    cfg = """
+- event_type: sop_executed
+  action_type: shell
+  payload:
+    command: /bin/true
+    timeout_seconds: 30
+- event_type: feedback_submitted
+  action_type: webhook
+  payload:
+    url: https://example.com/webhook
+"""
+    result = parse_hook_config(cfg)
+    assert len(result) == 2
+    assert result[0].event_type == "sop_executed"
+    assert result[1].action_type == "webhook"
+
+
+def test_parse_hook_config_from_yaml_file() -> None:
+    """parse_hook_config accepts a .yaml file path — llm example."""
+    path = os.path.join(EXAMPLES_DIR, "llm.hook.yaml")
+    result = parse_hook_config(path)
+    assert len(result) > 0
+    assert all(cb.action_type == "llm" for cb in result)
+
+
+def test_parse_hook_config_yaml_multiline_string() -> None:
+    """parse_hook_config handles multiline YAML block scalars — sourced from llm.hook.yaml."""
+    path = os.path.join(EXAMPLES_DIR, "llm.hook.yaml")
+    result = parse_hook_config(path)
+    assert len(result) == 4
+    assert all(cb.action_type == "llm" for cb in result)
+
+    # Each description should be a multiline string (contains newlines)
+    for cb in result:
+        assert "\n" in cb.payload["description"], f"Expected multiline description in {cb.event_type}"
+
+    # Spot-check sop_completed entry
+    completed = next(cb for cb in result if cb.event_type == "sop_completed")
+    assert "publish_sop" in completed.payload["action_command"]
+    assert "{sop_name}" in completed.payload["description"]
+    assert "{total_steps}" in completed.payload["description"]
+
+
+def test_parse_hook_config_from_llm_yaml_file() -> None:
+    """parse_hook_config accepts a .yaml file path — llm example."""
+    path = os.path.join(EXAMPLES_DIR, "llm.hook.yaml")
+    result = parse_hook_config(path)
+    assert len(result) > 0
+    assert all(cb.action_type == "llm" for cb in result)
+    event_types = {cb.event_type for cb in result}
+    assert event_types == {"run_sop", "sop_completed", "submit_sop_feedback", "publish_sop"}
+
+
+def test_parse_hook_config_from_yml_file() -> None:
+    """parse_hook_config accepts a .yml file extension."""
+    import tempfile
+
+    cfg = [{"event_type": "run_sop", "action_type": "shell", "payload": {"command": "echo hi", "timeout_seconds": 5}}]
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yml", delete=False, encoding="utf-8") as f:
+        import yaml as _yaml
+
+        _yaml.dump(cfg, f)
+        tmp_path = f.name
+
+    try:
+        result = parse_hook_config(tmp_path)
+        assert len(result) == 1
+        assert result[0].event_type == "run_sop"
+    finally:
+        os.unlink(tmp_path)
+
+
+def test_parse_hook_config_from_mixed_yaml_file() -> None:
+    """parse_hook_config returns empty list for a non-existent mixed yaml file (file removed)."""
+    result = parse_hook_config("/nonexistent/path/mixed.hook.yaml")
+    assert result == []
+
+
+def test_parse_hook_config_invalid_yaml() -> None:
+    """parse_hook_config returns empty list for invalid YAML that is also invalid JSON."""
+    result = parse_hook_config("{ bad: yaml: [unclosed")
+    assert result == []
+
+
+def test_parse_hook_config_missing_yaml_file() -> None:
+    """parse_hook_config returns empty list for a non-existent .yaml file."""
+    result = parse_hook_config("/nonexistent/path/hooks.yaml")
+    assert result == []
+
+
+def test_multiple_hooks_same_event() -> None:
+    """Multiple callbacks for the same event should all fire."""
+    registry = HookRegistry()
+
+    # Create two callbacks for the same event
+    shell_cb = CallbackDefinition("test_event", "shell", {"command": "echo test"})
+    webhook_cb = CallbackDefinition("test_event", "webhook", {"url": "https://example.com"})
+
+    registry.register("test_event", shell_cb)
+    registry.register("test_event", webhook_cb)
+
+    # Simulate execution
+    callbacks = registry.get_callbacks("test_event")
+    assert len(callbacks) == 2
+
+    # Check both callbacks are present
+    action_types = {cb.action_type for cb in callbacks}
+    assert "shell" in action_types
+    assert "webhook" in action_types
+
+
+def test_multiple_llm_hooks_same_event() -> None:
+    """Multiple LLM callbacks for the same event should all be added to suggested_actions."""
+    registry = HookRegistry()
+
+    # Create two LLM callbacks for the same event
+    cb1 = CallbackDefinition(
+        "run_sop", "llm", {"title": "First Suggestion", "description": "First suggestion for {sop_name}"}
+    )
+    cb2 = CallbackDefinition(
+        "run_sop",
+        "llm",
+        {
+            "title": "Second Suggestion",
+            "description": "Second suggestion for {sop_name}",
+            "action_command": 'publish_sop(change_type="minor")',
+        },
+    )
+
+    registry.register("run_sop", cb1)
+    registry.register("run_sop", cb2)
+
+    # Create executor with LLM handler
+    executor = HookExecutor(registry)
+    llm_handler = LLMSuggestionHandler(executor)
+    executor.register_handler("llm", llm_handler)
+
+    # Execute the event
+    executor.execute_event("run_sop", context={"sop_name": "test_sop"})
+
+    # Both suggestions should be in suggested_actions
+    assert len(executor.suggested_actions) == 2
+
+    # Verify both suggestions are present
+    titles = {s["title"] for s in executor.suggested_actions}
+    assert "First Suggestion" in titles
+    assert "Second Suggestion" in titles
+
+    # Verify context substitution worked
+    for suggestion in executor.suggested_actions:
+        assert "test_sop" in suggestion["description"]

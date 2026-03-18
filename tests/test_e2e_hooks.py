@@ -183,3 +183,94 @@ class TestE2ELLMHook:
                 assert SOP_NAME in patch_suggestion["description"]
         finally:
             _hook_middleware.executor = original
+
+
+class TestE2ELLMHookYAML:
+    """Same LLM hook behaviour, but loaded from llm.hook.yaml instead of llm.hook.json."""
+
+    async def test_llm_suggestions_forwarded_in_response_yaml(self):
+        executor = _setup_executor(str(EXAMPLES_DIR / "llm.hook.yaml"))
+        original = _hook_middleware.executor
+
+        try:
+            _hook_middleware.executor = executor
+
+            async with Client(mcp) as client:
+                data = await _walk_sop_to_completion(client)
+
+                assert "suggested_actions" in data, "suggested_actions missing from MCP response"
+                suggestions = data["suggested_actions"]
+                assert len(suggestions) >= 1
+
+                sop_suggestion = next((s for s in suggestions if "publish_sop" in s.get("action_command", "")), None)
+                assert sop_suggestion is not None
+                assert SOP_NAME in sop_suggestion["description"]
+                assert sop_suggestion["action_command"] == 'publish_sop(change_type="minor")'
+        finally:
+            _hook_middleware.executor = original
+
+    async def test_llm_suggestion_on_feedback_forwarded_in_response_yaml(self):
+        executor = _setup_executor(str(EXAMPLES_DIR / "llm.hook.yaml"))
+        original = _hook_middleware.executor
+
+        try:
+            _hook_middleware.executor = executor
+
+            async with Client(mcp) as client:
+                data = await _call(
+                    client,
+                    "submit_sop_feedback",
+                    {"sop_name": SOP_NAME, "feedback": "great SOP"},
+                )
+
+                assert "suggested_actions" in data, "suggested_actions missing from MCP response"
+                suggestions = data["suggested_actions"]
+                patch_suggestion = next((s for s in suggestions if "patch" in s.get("action_command", "")), None)
+                assert patch_suggestion is not None
+                assert SOP_NAME in patch_suggestion["description"]
+        finally:
+            _hook_middleware.executor = original
+
+
+class TestE2EMultipleLLMHooks:
+    """Multiple LLM hooks for the same event should all appear in the response."""
+
+    async def test_multiple_llm_hooks_same_event_in_response(self):
+        """Two LLM hooks for run_sop should both appear in suggested_actions."""
+        # Create a custom config with two LLM hooks for run_sop
+        config = """
+- event_type: run_sop
+  action_type: llm
+  payload:
+    title: "First Suggestion"
+    description: "First suggestion for {sop_name}"
+
+- event_type: run_sop
+  action_type: llm
+  payload:
+    title: "Second Suggestion"
+    description: "Second suggestion for {sop_name}"
+    action_command: "publish_sop(change_type=\\"minor\\")"
+"""
+        executor = _setup_executor(config)
+        original = _hook_middleware.executor
+
+        try:
+            _hook_middleware.executor = executor
+
+            async with Client(mcp) as client:
+                data = await _call(client, "run_sop", {"sop_name": SOP_NAME})
+
+                assert "suggested_actions" in data, "suggested_actions missing from MCP response"
+                suggestions = data["suggested_actions"]
+                assert len(suggestions) == 2, f"Expected 2 suggestions, got {len(suggestions)}"
+
+                titles = {s["title"] for s in suggestions}
+                assert "First Suggestion" in titles
+                assert "Second Suggestion" in titles
+
+                # Check context substitution
+                for suggestion in suggestions:
+                    assert SOP_NAME in suggestion["description"]
+        finally:
+            _hook_middleware.executor = original
