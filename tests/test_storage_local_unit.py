@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from src.utils.storage_local import LocalFilesystemBackend
+from src.utils.storage import LocalFilesystemBackend
 
 
 class TestSeedingEdgeCases:

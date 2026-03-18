@@ -49,6 +49,10 @@ Every response includes an `instruction` field that tells the agent to *act*, no
 | `submit_sop_feedback` | Submit improvement feedback for a specific SOP |
 | `run_sop` | Step-by-step execution of any SOP, with `sop_name` parameter |
 
+## Hooks
+
+sop-mcp includes an optional hook system that triggers external actions (shell commands, webhooks, LLM suggestions) when tools are called. See the [Hook System Documentation](docs/hooks.md) for setup, events, context variables, and examples.
+
 ## Discovering SOPs
 
 SOPs are exposed as MCP resources, so agents can list and read them before starting execution.
@@ -120,7 +124,18 @@ At completion, the LLM uses its conversation history of `step_output` submission
 
 ## Storage Configuration
 
-sop-mcp supports multiple storage backends for SOP persistence. Choose the backend that fits your deployment:
+sop-mcp uses local filesystem storage for SOP persistence.
+
+### Hook Events
+
+The hook system uses FastMCP middleware to fire events on every tool call. Event names match tool names directly — no mapping needed.
+
+| Event Name | Triggered When | Description |
+|------------|-----------------|-------------|
+| `run_sop` | Every `run_sop()` call | Fires on every step |
+| `publish_sop` | Every `publish_sop()` call | Fires on publish attempts |
+| `submit_sop_feedback` | Every `submit_sop_feedback()` call | Fires on feedback submissions |
+| `sop_completed` | `run_sop()` final step | Bonus event when `current_step == total_steps` |
 
 ### Local Filesystem (default)
 
@@ -143,50 +158,6 @@ To persist SOPs locally, set `SOP_STORAGE_DIR`:
 ```
 
 Bundled SOPs are automatically seeded into the custom directory on first run.
-
-### S3 Storage
-
-For cloud-based persistence with automatic synchronization across instances (ideal for Lambda or containerized deployments).
-
-**Installation:** S3 support requires the optional `s3` extras:
-
-```bash
-# With pip
-pip install sop-mcp[s3]
-
-# With uvx (for MCP clients)
-uvx --with sop-mcp[s3] sop-mcp
-```
-
-**Configuration:**
-
-```json
-{
-  "mcpServers": {
-    "sop-mcp": {
-      "command": "uvx",
-      "args": ["--with", "sop-mcp[s3]", "sop-mcp"],
-      "env": {
-        "SOP_STORAGE_TYPE": "s3",
-        "SOP_S3_BUCKET": "your-bucket-name",
-        "SOP_S3_PREFIX": "sops/"
-      }
-    }
-  }
-}
-```
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `SOP_STORAGE_TYPE` | Yes | `local` | Set to `s3` to enable S3 storage |
-| `SOP_S3_BUCKET` | Yes | — | S3 bucket name for SOP storage |
-| `SOP_S3_PREFIX` | No | `sops/` | Key prefix for organizing SOPs in the bucket |
-
-The S3 backend:
-- Syncs from S3 to local cache (`/tmp`) on cold start
-- Writes changes back to S3 immediately
-- Seeds bundled SOPs to S3 if the bucket is empty on first boot
-- Supports multiple environments via different prefixes
 
 ## Writing an SOP
 
