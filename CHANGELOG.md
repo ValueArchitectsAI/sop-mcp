@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.9.0...v0.9.1) (2026-03-18)
+
+
+### Bug Fixes
+
+* add YAML support for hook configuration ([#50](https://github.com/ValueArchitectsAI/sop-mcp/issues/50)) ([022b502](https://github.com/ValueArchitectsAI/sop-mcp/commit/022b502ca4bfed55e851170fdb027ee1255dd6cd))
+
 ## [0.9.0](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.8.0...v0.9.0) (2026-03-18)
 
 
