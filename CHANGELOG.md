@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.8.0...v0.9.0) (2026-03-18)
+
+
+### Features
+
+* **hooks:** Add FastMCP middleware hook system with e2e tests ([#47](https://github.com/ValueArchitectsAI/sop-mcp/issues/47)) ([2557fc7](https://github.com/ValueArchitectsAI/sop-mcp/commit/2557fc7ec2be615d1bbf09d2a68dc45443896d6d))
+
 ## [0.8.0](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.7.1...v0.8.0) (2026-03-03)
 
 
