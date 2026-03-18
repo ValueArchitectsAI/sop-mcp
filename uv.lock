@@ -1648,6 +1648,8 @@ version = "0.8.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastmcp" },
+    { name = "pydantic" },
+    { name = "requests" },
 ]
 
 [package.optional-dependencies]
@@ -1671,6 +1673,8 @@ dev = [
 requires-dist = [
     { name = "boto3", marker = "extra == 's3'", specifier = ">=1.35.0" },
     { name = "fastmcp", specifier = ">=3.0.0" },
+    { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "requests", specifier = ">=2.31.0" },
 ]
 provides-extras = ["s3"]
 

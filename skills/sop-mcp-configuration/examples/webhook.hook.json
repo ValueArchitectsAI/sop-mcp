@@ -1,0 +1,44 @@
+[
+  {
+    "event_type": "run_sop",
+    "action_type": "webhook",
+    "payload": {
+      "url": "https://hooks.example.com/sop-step",
+      "sop_name": "{sop_name}",
+      "timeout_seconds": 5
+    }
+  },
+  {
+    "event_type": "sop_completed",
+    "action_type": "webhook",
+    "payload": {
+      "url": "https://hooks.example.com/sop-complete",
+      "sop_name": "{sop_name}",
+      "headers": {
+        "Authorization": "Bearer your-token-here"
+      },
+      "timeout_seconds": 5
+    }
+  },
+  {
+    "event_type": "publish_sop",
+    "action_type": "webhook",
+    "payload": {
+      "url": "https://hooks.example.com/sop-published",
+      "sop_name": "{sop_name}",
+      "timeout_seconds": 3
+    }
+  },
+  {
+    "event_type": "submit_sop_feedback",
+    "action_type": "webhook",
+    "payload": {
+      "url": "https://hooks.example.com/feedback",
+      "sop_name": "{sop_name}",
+      "headers": {
+        "X-SOP-Version": "{sop_version}"
+      },
+      "timeout_seconds": 5
+    }
+  }
+]

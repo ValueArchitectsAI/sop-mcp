@@ -2,6 +2,7 @@
 
 import logging
 import re
+from enum import Enum
 from typing import Annotated, Any
 
 from fastmcp.tools import tool
@@ -11,6 +12,13 @@ from src.utils import SOP, ChangeType
 from src.utils.sop_parser import _parse_semver, _set_version_in_content
 
 logger = logging.getLogger(__name__)
+
+
+class Scope(Enum):
+    """Scope of an SOP document."""
+
+    PERSONAL = "personal"
+    SHARED = "shared"
 
 
 def _get_backend():
@@ -34,10 +42,11 @@ EPHEMERAL_WARNING = (
         "Pass the entire document as a single string value — do not omit it or pass an empty object.\n\n"
         'Example call: {"content": "# My SOP\\n\\n## Document Information\\n- **Document ID**: '
         "my_sop_name\\n- **Version**: 1.0.0\\n\\n## Overview\\nDescription.\\n\\n"
-        '### Step 1: First step\\nDo the thing.", "change_type": "minor"}\n\n'
+        '### Step 1: First step\\nDo the thing.", "change_type": "minor", "scope": "personal"}\n\n'
         "The SOP name is extracted from the Document ID field in the content. "
         "The version is auto-bumped based on change_type. "
-        "New SOPs always start at v1.0.0."
+        "New SOPs always start at v1.0.0.\n\n"
+        "SOPs are published as personal (private) by default. Use scope='shared' for team-wide SOPs."
     ),
 )
 def publish_sop(
@@ -59,6 +68,13 @@ def publish_sop(
             description="Semver bump type: major (breaking), minor (feature), patch (bugfix).",
         ),
     ] = ChangeType.MINOR,
+    scope: Annotated[
+        Scope,
+        Field(
+            default=Scope.PERSONAL,
+            description="Scope: 'personal' for user-specific SOPs, 'shared' for team-wide SOPs",
+        ),
+    ] = Scope.PERSONAL,
 ) -> dict[str, Any]:
     """Publish a new or updated SOP document.
 
@@ -66,7 +82,12 @@ def publish_sop(
     The version is auto-bumped based on the change_type using semantic versioning.
     For brand-new SOPs the initial version is 1.0.0 regardless of change_type.
     """
-    logger.info("Invoking publish_sop with args: content=<%s chars>, change_type=%s", len(content), change_type.value)
+    logger.info(
+        "Invoking publish_sop with args: content=<%s chars>, change_type=%s, scope=%s",
+        len(content),
+        change_type.value,
+        scope.value,
+    )
 
     try:
         sop = SOP.from_content(content)
@@ -109,9 +130,10 @@ def publish_sop(
         "title": sop.title,
         "version": new_version,
         "change_type": change_type.value,
+        "scope": scope.value,
         "total_steps": sop.total_steps,
         "message": (
-            f"SOP '{sop.name}' published as v{new_version} ({change_type.value}). "
+            f"SOP '{sop.name}' published as v{new_version} ({change_type.value}) with {scope.value} scope. "
             "Restart the server to register the new tool."
         ),
     }

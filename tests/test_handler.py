@@ -16,7 +16,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from src.server import backend, mcp
-from src.utils.storage_local import BUNDLED_SOPS_DIR
+from src.utils.storage import BUNDLED_SOPS_DIR
 
 SOP_NAME = "sop_creation_guide"
 
