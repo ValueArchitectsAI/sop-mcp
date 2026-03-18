@@ -55,7 +55,7 @@ The [`skills/sop-mcp-configuration/`](skills/sop-mcp-configuration/) folder cont
 
 ## Hooks
 
-sop-mcp includes an optional hook system that triggers external actions (shell commands, webhooks, LLM suggestions) when tools are called. See the [Hook System Documentation](docs/hooks.md) for setup, events, context variables, and examples.
+sop-mcp includes an optional hook system that triggers external actions (shell commands, webhooks, LLM suggestions) when tools are called. See the [`SKILL.md`](skills/sop-mcp-configuration/SKILL.md) for setup, events, context variables, and examples.
 
 ## Discovering SOPs
 
