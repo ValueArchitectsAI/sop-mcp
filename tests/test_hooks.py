@@ -110,7 +110,9 @@ def test_parse_hook_config_empty_string() -> None:
 
 # ── File-based config tests ──────────────────────────────────────────
 
-EXAMPLES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs", "examples")
+EXAMPLES_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "skills", "sop-mcp-configuration", "examples"
+)
 
 
 def test_parse_hook_config_from_shell_file() -> None:
