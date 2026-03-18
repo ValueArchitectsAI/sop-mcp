@@ -11,6 +11,7 @@ from threading import RLock
 from typing import Any, Dict, List, Literal, Optional
 
 import requests
+import yaml
 
 
 class SecurityError(Exception):
@@ -38,8 +39,9 @@ def hooks_enabled() -> bool:
     """Check whether the hook system should be active.
 
     Hooks are enabled when `SOP_HOOK_CONFIG` is set to a non-empty value.
-    The value can be either a JSON string or a file path ending with '.json'.
-    `SOP_HOOKS_ENABLED` is no longer required — having a config is sufficient.
+    The value can be either a JSON string or a file path ending with '.json',
+    '.yaml', or '.yml'. `SOP_HOOKS_ENABLED` is no longer required — having a
+    config is sufficient.
 
     Returns:
         True if hooks should be active, False otherwise.
@@ -49,41 +51,64 @@ def hooks_enabled() -> bool:
 
 
 def parse_hook_config(config_str: str) -> List[CallbackDefinition]:
-    """Parse hook configuration from JSON string or file path into CallbackDefinition objects.
+    """Parse hook configuration from a JSON/YAML string or file path into CallbackDefinition objects.
 
-    If config_str ends with '.json', it's treated as a file path and read from disk.
-    Otherwise, it's parsed as a JSON string.
+    If config_str ends with '.json', '.yaml', or '.yml', it's treated as a file path and
+    read from disk. JSON files are parsed as JSON; YAML files are parsed as YAML.
+    Otherwise, the string is tried as JSON first, then YAML.
 
-    Validates JSON structure and required fields (`event_type`, `action_type`, `payload`).
-    Handles malformed JSON gracefully by returning an empty list.
+    Validates structure and required fields (`event_type`, `action_type`, `payload`).
+    Handles malformed input gracefully by returning an empty list.
     Performs security validation on callbacks.
 
     Args:
-        config_str: JSON string or file path ending with '.json' containing hook configuration
+        config_str: JSON/YAML string or file path ending with '.json', '.yaml', or '.yml'
 
     Returns:
-        List of valid CallbackDefinition objects. Returns empty list if JSON is malformed
-        or contains no valid definitions.
+        List of valid CallbackDefinition objects. Returns empty list on parse failure
+        or if no valid definitions are found.
     """
-    # Check if config_str is a file path (ends with .json)
-    if config_str.strip().endswith(".json"):
+    stripped = config_str.strip()
+    is_yaml_file = stripped.endswith(".yaml") or stripped.endswith(".yml")
+    is_json_file = stripped.endswith(".json")
+
+    if is_json_file or is_yaml_file:
         try:
-            with open(config_str.strip(), "r", encoding="utf-8") as f:
-                config_str = f.read()
+            with open(stripped, "r", encoding="utf-8") as f:
+                raw = f.read()
         except (OSError, IOError) as e:
-            logging.warning(f"Failed to read hook config file '{config_str}': {e}")
+            logging.warning(f"Failed to read hook config file '{stripped}': {e}")
             return []
 
-    # Enforce 64KB maximum for hook configuration (Requirement 4.2)
-    if len(config_str) > 64 * 1024:
-        logging.warning("Hook configuration exceeds 64KB limit. Discarding.")
-        return []
+        # Enforce 64KB maximum for hook configuration (Requirement 4.2)
+        if len(raw) > 64 * 1024:
+            logging.warning("Hook configuration exceeds 64KB limit. Discarding.")
+            return []
 
-    try:
-        config = json.loads(config_str)
-    except json.JSONDecodeError:
-        # Malformed JSON - return empty list per requirements
-        return []
+        if is_yaml_file:
+            try:
+                config = yaml.safe_load(raw)
+            except yaml.YAMLError:
+                return []
+        else:
+            try:
+                config = json.loads(raw)
+            except json.JSONDecodeError:
+                return []
+    else:
+        # Enforce 64KB maximum for hook configuration (Requirement 4.2)
+        if len(stripped) > 64 * 1024:
+            logging.warning("Hook configuration exceeds 64KB limit. Discarding.")
+            return []
+
+        # Try JSON first, fall back to YAML
+        try:
+            config = json.loads(stripped)
+        except json.JSONDecodeError:
+            try:
+                config = yaml.safe_load(stripped)
+            except yaml.YAMLError:
+                return []
 
     if not isinstance(config, list):
         return []

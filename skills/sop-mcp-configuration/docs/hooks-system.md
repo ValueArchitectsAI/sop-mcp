@@ -56,6 +56,15 @@ Same variables as `run_sop` — fires only when `current_step == total_steps`.
 
 ### Usage Example
 
+```yaml
+- event_type: run_sop
+  action_type: shell
+  payload:
+    command: "echo SOP {sop_name} v{sop_version} step {current_step}/{total_steps}"
+```
+
+Or in JSON:
+
 ```json
 {
   "event_type": "run_sop",
@@ -125,10 +134,21 @@ Add suggested actions to tool responses for AI assistance.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `SOP_HOOK_CONFIG` | Yes | — | Path to a `.json` file containing hook definitions. Hooks are enabled when this is set. |
+| `SOP_HOOK_CONFIG` | Yes | — | Path to a `.json`, `.yaml`, or `.yml` file containing hook definitions, or an inline JSON/YAML string. Hooks are enabled when this is set. |
 | `SOP_HOOKS_SECURE` | No | `true` | HTTPS-only webhooks, shell command validation. Set to `false` to disable. |
 
 ### Hook Configuration Format
+
+YAML (recommended for readability):
+
+```yaml
+- event_type: run_sop
+  action_type: shell
+  payload:
+    command: "echo {sop_name}"
+```
+
+JSON equivalent:
 
 ```json
 [
@@ -148,19 +168,24 @@ Example hook configurations are available in [`examples/`](../examples/):
 |------|-------------|
 | [`shell.hook.json`](../examples/shell.hook.json) | Shell commands that log event details |
 | [`webhook.hook.json`](../examples/webhook.hook.json) | Webhook POSTs to external endpoints |
-| [`llm.hook.json`](../examples/llm.hook.json) | LLM suggestions surfaced in tool responses |
+| [`llm.hook.json`](../examples/llm.hook.json) | LLM suggestions surfaced in tool responses (JSON) |
+| [`llm.hook.yaml`](../examples/llm.hook.yaml) | LLM suggestions surfaced in tool responses (YAML) |
 | [`mixed.hook.json`](../examples/mixed.hook.json) | Combines shell + webhook + llm on the same events |
 
 ### Quick Start
 
 ```bash
-export SOP_HOOK_CONFIG=/path/to/skills/sop-mcp-configuration/examples/shell.hook.json
+# YAML
+export SOP_HOOK_CONFIG=/path/to/skills/sop-mcp-configuration/examples/llm.hook.yaml
+
+# JSON
+export SOP_HOOK_CONFIG=/path/to/skills/sop-mcp-configuration/examples/llm.hook.json
 ```
 
 ## Error Handling
 
 - Hook failures never stop core operations — errors are logged
-- Malformed JSON config returns empty hook list (system stays disabled)
+- Malformed JSON/YAML config returns empty hook list (system stays disabled)
 - Insecure hooks are skipped with warnings
 
 ## Security Best Practices
