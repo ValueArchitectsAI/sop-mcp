@@ -56,7 +56,7 @@ Add this to your MCP client's configuration file:
       "args": ["sop-mcp"],
       "env": {
         "SOP_STORAGE_DIR": "/path/to/your/sops",
-        "SOP_HOOK_CONFIG": "[{\"event_type\":\"run_sop\",\"action_type\":\"shell\",\"payload\":{\"command\":\"echo SOP {sop_name} step {current_step}/{total_steps}\"}}]"
+        "SOP_HOOK_CONFIG": "/path/to/your/hooks.json"
       }
     }
   }
@@ -70,7 +70,7 @@ Add this to your MCP client's configuration file:
 | Variable | Purpose | Default |
 |----------|---------|---------|
 | `SOP_STORAGE_DIR` | Directory for SOP storage | Bundled directory (ephemeral) |
-| `SOP_HOOK_CONFIG` | JSON array of hook definitions | `null` (hooks disabled) |
+| `SOP_HOOK_CONFIG` | Path to a `.json` file containing hook definitions | `null` (hooks disabled) |
 | `SOP_HOOKS_SECURE` | Enforce HTTPS webhooks and command validation | `"true"` |
 
 ---
@@ -115,8 +115,8 @@ Step 1 of 8: [instructions...]
 - Restart your MCP client after config changes
 
 ### Hooks not firing
-- Verify `SOP_HOOK_CONFIG` is valid JSON
-- Ensure quotes are properly escaped in env values
+- Verify `SOP_HOOK_CONFIG` points to a valid `.json` file path
+- Ensure the file exists and is readable
 - Check server logs for hook errors
 
 ---

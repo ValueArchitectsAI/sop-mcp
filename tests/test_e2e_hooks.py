@@ -26,7 +26,7 @@ from src.server import _hook_middleware, mcp
 pytestmark = pytest.mark.asyncio
 
 SOP_NAME = "sop_creation_guide"
-EXAMPLES_DIR = Path(__file__).parent.parent / "docs" / "examples"
+EXAMPLES_DIR = Path(__file__).parent.parent / "skills" / "sop-mcp-configuration" / "examples"
 
 
 async def _call(client: Client, tool_name: str, arguments: dict | None = None) -> dict:

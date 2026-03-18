@@ -125,7 +125,7 @@ Add suggested actions to tool responses for AI assistance.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `SOP_HOOK_CONFIG` | Yes | — | JSON string with hook definitions. Hooks are enabled when this is set. |
+| `SOP_HOOK_CONFIG` | Yes | — | Path to a `.json` file containing hook definitions. Hooks are enabled when this is set. |
 | `SOP_HOOKS_SECURE` | No | `true` | HTTPS-only webhooks, shell command validation. Set to `false` to disable. |
 
 ### Hook Configuration Format
@@ -142,19 +142,19 @@ Add suggested actions to tool responses for AI assistance.
 
 ## Complete Examples
 
-Example hook configurations are available in [`docs/examples/`](examples/):
+Example hook configurations are available in [`examples/`](../examples/):
 
 | File | Description |
 |------|-------------|
-| [`shell.hook.json`](../skills/sop-mcp-configuration/examples/shell.hook.json) | Shell commands that log event details |
-| [`webhook.hook.json`](../skills/sop-mcp-configuration/examples/webhook.hook.json) | Webhook POSTs to external endpoints |
-| [`llm.hook.json`](../skills/sop-mcp-configuration/examples/llm.hook.json) | LLM suggestions surfaced in tool responses |
-| [`mixed.hook.json`](../skills/sop-mcp-configuration/examples/mixed.hook.json) | Combines shell + webhook + llm on the same events |
+| [`shell.hook.json`](../examples/shell.hook.json) | Shell commands that log event details |
+| [`webhook.hook.json`](../examples/webhook.hook.json) | Webhook POSTs to external endpoints |
+| [`llm.hook.json`](../examples/llm.hook.json) | LLM suggestions surfaced in tool responses |
+| [`mixed.hook.json`](../examples/mixed.hook.json) | Combines shell + webhook + llm on the same events |
 
 ### Quick Start
 
 ```bash
-export SOP_HOOK_CONFIG=$(cat docs/examples/shell.hook.json)
+export SOP_HOOK_CONFIG=/path/to/skills/sop-mcp-configuration/examples/shell.hook.json
 ```
 
 ## Error Handling
@@ -173,7 +173,7 @@ export SOP_HOOK_CONFIG=$(cat docs/examples/shell.hook.json)
 ## Testing Hooks
 
 ```bash
-export SOP_HOOK_CONFIG='[{"event_type":"run_sop","action_type":"shell","payload":{"command":"echo test"}}]'
+export SOP_HOOK_CONFIG=/path/to/skills/sop-mcp-configuration/examples/shell.hook.json
 ```
 
 All hook functionality is covered by property-based tests in `test_hooks.py` and e2e tests in `test_e2e_hooks.py`.
