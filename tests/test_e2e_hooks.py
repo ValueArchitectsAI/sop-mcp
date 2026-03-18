@@ -155,9 +155,7 @@ class TestE2ELLMHook:
                 assert len(suggestions) >= 1
 
                 # The sop_completed hook in llm.hook.json suggests publishing
-                sop_suggestion = next(
-                    (s for s in suggestions if "publish_sop" in s.get("action_command", "")), None
-                )
+                sop_suggestion = next((s for s in suggestions if "publish_sop" in s.get("action_command", "")), None)
                 assert sop_suggestion is not None
                 assert SOP_NAME in sop_suggestion["description"]
                 assert sop_suggestion["action_command"] == 'publish_sop(change_type="minor")'
@@ -180,9 +178,7 @@ class TestE2ELLMHook:
 
                 assert "suggested_actions" in data, "suggested_actions missing from MCP response"
                 suggestions = data["suggested_actions"]
-                patch_suggestion = next(
-                    (s for s in suggestions if "patch" in s.get("action_command", "")), None
-                )
+                patch_suggestion = next((s for s in suggestions if "patch" in s.get("action_command", "")), None)
                 assert patch_suggestion is not None
                 assert SOP_NAME in patch_suggestion["description"]
         finally:
