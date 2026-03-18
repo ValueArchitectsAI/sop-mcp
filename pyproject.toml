@@ -58,6 +58,7 @@ python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-v"
 asyncio_mode = "auto"
+pythonpath = ["."]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]

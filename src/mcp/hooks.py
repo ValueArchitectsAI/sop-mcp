@@ -66,14 +66,14 @@ def parse_hook_config(config_str: str) -> List[CallbackDefinition]:
         or contains no valid definitions.
     """
     # Check if config_str is a file path (ends with .json)
-    if config_str.strip().endswith('.json'):
+    if config_str.strip().endswith(".json"):
         try:
-            with open(config_str.strip(), 'r', encoding='utf-8') as f:
+            with open(config_str.strip(), "r", encoding="utf-8") as f:
                 config_str = f.read()
         except (OSError, IOError) as e:
             logging.warning(f"Failed to read hook config file '{config_str}': {e}")
             return []
-    
+
     # Enforce 64KB maximum for hook configuration (Requirement 4.2)
     if len(config_str) > 64 * 1024:
         logging.warning("Hook configuration exceeds 64KB limit. Discarding.")
