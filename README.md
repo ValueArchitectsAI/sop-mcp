@@ -49,9 +49,13 @@ Every response includes an `instruction` field that tells the agent to *act*, no
 | `submit_sop_feedback` | Submit improvement feedback for a specific SOP |
 | `run_sop` | Step-by-step execution of any SOP, with `sop_name` parameter |
 
+## Skills
+
+The [`skills/sop-mcp-configuration/`](skills/sop-mcp-configuration/) folder contains a self-contained configuration skill with setup instructions, hook examples, and documentation. Copy the [`SKILL.md`](skills/sop-mcp-configuration/SKILL.md) into your MCP client's skill directory to get guided configuration assistance.
+
 ## Hooks
 
-sop-mcp includes an optional hook system that triggers external actions (shell commands, webhooks, LLM suggestions) when tools are called. See the [Hook System Documentation](docs/hooks.md) for setup, events, context variables, and examples.
+sop-mcp includes an optional hook system that triggers external actions (shell commands, webhooks, LLM suggestions) when tools are called. See the [`SKILL.md`](skills/sop-mcp-configuration/SKILL.md) for setup, events, context variables, and examples.
 
 ## Discovering SOPs
 
