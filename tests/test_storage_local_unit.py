@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from src.utils.storage import LocalFilesystemBackend
+from src.sop_mcp.utils.storage import LocalFilesystemBackend
 
 
 class TestSeedingEdgeCases:

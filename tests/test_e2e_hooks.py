@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastmcp import Client
 
-from src.mcp.hooks import (
+from src.sop_mcp.hooks import (
     HookExecutor,
     HookRegistry,
     LLMSuggestionHandler,
@@ -21,7 +21,7 @@ from src.mcp.hooks import (
     WebhookHandler,
     parse_hook_config,
 )
-from src.server import _hook_middleware, mcp
+from src.sop_mcp.server import _hook_middleware, mcp
 
 pytestmark = pytest.mark.asyncio
 

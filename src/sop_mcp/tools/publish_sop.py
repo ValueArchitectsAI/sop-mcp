@@ -8,8 +8,8 @@ from typing import Annotated, Any
 from fastmcp.tools import tool
 from pydantic import Field
 
-from src.utils import SOP, ChangeType
-from src.utils.sop_parser import _parse_semver, _set_version_in_content
+from src.sop_mcp.utils import SOP, ChangeType
+from src.sop_mcp.utils.sop_parser import _parse_semver, _set_version_in_content
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +23,9 @@ class Scope(Enum):
 
 def _get_backend():
     """Lazy import to use the same backend instance as src.server (supports test patching)."""
-    import src.server
+    import src.sop_mcp.server
 
-    return src.server.backend
+    return src.sop_mcp.server.backend
 
 
 EPHEMERAL_WARNING = (

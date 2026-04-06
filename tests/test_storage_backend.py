@@ -10,7 +10,7 @@ import string
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from src.utils.storage import LocalFilesystemBackend
+from src.sop_mcp.utils.storage import LocalFilesystemBackend
 
 # --- Strategies ---
 
@@ -84,7 +84,7 @@ def test_listing_reflects_written_sops(tmp_path_factory, data: st.DataObject, nu
 
     # list_versions should return exactly the written versions for each name, sorted by semver
     for name, versions in expected_versions.items():
-        from src.utils.sop_parser import _parse_semver
+        from src.sop_mcp.utils.sop_parser import _parse_semver
 
         expected_sorted = sorted(versions, key=_parse_semver)
         assert backend.list_versions(name) == expected_sorted
@@ -110,7 +110,7 @@ def test_path_validation_rejects_invalid_paths(path_str: str) -> None:
     _validate_storage_path should raise ValueError."""
     import pytest
 
-    from src.utils.storage import _validate_storage_path
+    from src.sop_mcp.utils.storage import _validate_storage_path
 
     with pytest.raises(ValueError):
         _validate_storage_path(path_str)
@@ -181,9 +181,9 @@ def test_ephemeral_warning_iff_ephemeral_backend(
     """For any SOP content published or feedback submitted, the response
     contains an ephemeral storage warning if and only if the underlying
     StorageBackend.is_ephemeral is True."""
-    import src.mcp.tools.publish_sop as publish_module
-    import src.mcp.tools.submit_sop_feedback as feedback_module
-    import src.server as server_module
+    import src.sop_mcp.server as server_module
+    import src.sop_mcp.tools.publish_sop as publish_module
+    import src.sop_mcp.tools.submit_sop_feedback as feedback_module
 
     base_dir = tmp_path_factory.mktemp("sops")
     test_backend = LocalFilesystemBackend(base_dir=base_dir, is_ephemeral=is_ephemeral)

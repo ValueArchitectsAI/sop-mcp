@@ -47,7 +47,7 @@ dev = [
 ]
 
 [project.scripts]
-sop-mcp = "src.server:run"
+sop-mcp = "src.sop_mcp.server:run"
 
 [build-system]
 requires = ["hatchling"]
