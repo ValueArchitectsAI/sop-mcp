@@ -29,7 +29,7 @@ class ChangeType(Enum):
 
 
 # Directory where SOP files are stored
-SOPS_DIR = Path(__file__).parent.parent / "mcp" / "resources"
+SOPS_DIR = Path(__file__).parent.parent / "resources"
 
 
 def _parse_semver(version_str: str) -> tuple[int, ...]:

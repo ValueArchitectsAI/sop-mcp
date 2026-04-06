@@ -13,7 +13,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from src.utils.sop_parser import SOP, _extract_mcp_server_prerequisites, list_available_sops
+from src.sop_mcp.utils.sop_parser import SOP, _extract_mcp_server_prerequisites, list_available_sops
 
 
 class TestSopTitleExtraction:

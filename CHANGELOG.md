@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.9.1...v0.9.2) (2026-04-06)
+
+
+### Bug Fixes
+
+* rename src/mcp to src/sop_mcp to resolve Python namespace collision ([#60](https://github.com/ValueArchitectsAI/sop-mcp/issues/60)) ([cab0762](https://github.com/ValueArchitectsAI/sop-mcp/commit/cab07626a5016fa55e89558e0d57b01938b836b3))
+
 ## [0.9.1](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.9.0...v0.9.1) (2026-03-18)
 
 

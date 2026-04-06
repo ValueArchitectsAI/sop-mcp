@@ -13,11 +13,11 @@ from fastmcp import FastMCP
 from fastmcp.server.providers import FileSystemProvider
 from fastmcp.server.transforms import ResourcesAsTools
 
-from src.mcp.resources.sop_content import register_sop_resources
-from src.mcp.tools.publish_sop import EPHEMERAL_WARNING, publish_sop  # noqa: F401
-from src.mcp.tools.run_sop import run_sop  # noqa: F401
-from src.mcp.tools.submit_sop_feedback import submit_sop_feedback  # noqa: F401
-from src.utils import get_storage_backend
+from src.sop_mcp.resources.sop_content import register_sop_resources
+from src.sop_mcp.tools.publish_sop import EPHEMERAL_WARNING, publish_sop  # noqa: F401
+from src.sop_mcp.tools.run_sop import run_sop  # noqa: F401
+from src.sop_mcp.tools.submit_sop_feedback import submit_sop_feedback  # noqa: F401
+from src.sop_mcp.utils import get_storage_backend
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ def _init_hooks():
 
     Returns the HookExecutor instance (or None if hooks are disabled).
     """
-    from src.mcp.hooks import (
+    from src.sop_mcp.hooks import (
         HookExecutor,
         HookRegistry,
         LLMSuggestionHandler,
@@ -68,11 +68,11 @@ _hook_executor = _init_hooks()
 # Initialize FastMCP server with FileSystemProvider for static tools
 mcp = FastMCP(
     "SOP MCP Server",
-    providers=[FileSystemProvider(Path(__file__).parent / "mcp")],
+    providers=[FileSystemProvider(Path(__file__).parent)],
 )
 
 # Add hook middleware (fires events after tool calls)
-from src.hook_middleware import HookMiddleware  # noqa: E402
+from src.sop_mcp.hook_middleware import HookMiddleware  # noqa: E402
 
 _hook_middleware = HookMiddleware(executor=_hook_executor)
 mcp.add_middleware(_hook_middleware)

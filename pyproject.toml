@@ -1,6 +1,6 @@
 [project]
 name = "sop-mcp"
-version = "0.9.1"
+version = "0.9.2"
 description = "An MCP server for guiding users through Standard Operating Procedures"
 readme = "README.md"
 license = { text = "MIT" }
@@ -47,7 +47,7 @@ dev = [
 ]
 
 [project.scripts]
-sop-mcp = "src.server:run"
+sop-mcp = "src.sop_mcp.server:run"
 
 [build-system]
 requires = ["hatchling"]
