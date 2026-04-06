@@ -12,8 +12,8 @@ import pytest
 import pytest_asyncio
 from fastmcp import Client
 
-from src.server import backend, mcp
-from src.utils import SOP
+from src.sop_mcp.server import backend, mcp
+from src.sop_mcp.utils import SOP
 
 pytestmark = pytest.mark.asyncio
 

@@ -5,8 +5,8 @@ from typing import Annotated, Any
 
 from fastmcp.tools import tool
 
-from src.utils import SOP
-from src.utils.storage import LocalFilesystemBackend
+from src.sop_mcp.utils import SOP
+from src.sop_mcp.utils.storage import LocalFilesystemBackend
 
 logger = logging.getLogger(__name__)
 

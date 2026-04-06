@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 from hypothesis import given
 from hypothesis import strategies as st
 
-from src.mcp.hooks import (
+from src.sop_mcp.hooks import (
     CallbackDefinition,
     HookExecutor,
     HookRegistry,

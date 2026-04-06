@@ -15,8 +15,8 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from src.server import backend, mcp
-from src.utils.storage import BUNDLED_SOPS_DIR
+from src.sop_mcp.server import backend, mcp
+from src.sop_mcp.utils.storage import BUNDLED_SOPS_DIR
 
 SOP_NAME = "sop_creation_guide"
 
@@ -35,7 +35,7 @@ async def call_run_sop(sop_name: str = SOP_NAME, **kwargs) -> dict:
 
 def get_sop_info(sop_name: str = SOP_NAME) -> dict:
     """Helper: get SOP metadata directly from the backend."""
-    from src.utils import SOP
+    from src.sop_mcp.utils import SOP
 
     content = backend.read_sop(sop_name)
     sop = SOP.from_content(content)

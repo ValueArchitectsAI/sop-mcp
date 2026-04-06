@@ -16,7 +16,7 @@ from .sop_parser import _parse_semver
 logger = logging.getLogger(__name__)
 
 # Directory containing the SOPs bundled with the package.
-BUNDLED_SOPS_DIR = Path(__file__).parent.parent / "mcp" / "resources"
+BUNDLED_SOPS_DIR = Path(__file__).parent.parent / "resources"
 
 
 class LocalFilesystemBackend:

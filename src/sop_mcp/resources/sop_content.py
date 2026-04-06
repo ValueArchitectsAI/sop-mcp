@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from fastmcp.resources import resource
 
-from src.utils import get_storage_backend
+from src.sop_mcp.utils import get_storage_backend
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -29,7 +29,7 @@ def read_sop_resource(sop_name: str, version: str = None) -> str:
 
 def register_sop_resources(mcp: FastMCP) -> None:
     """Register concrete resources per SOP for discoverability in list_resources."""
-    from src.utils import SOP
+    from src.sop_mcp.utils import SOP
 
     for sop_name in backend.list_sops():
         versions = backend.list_versions(sop_name)
