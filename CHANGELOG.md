@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.4](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.9.3...v0.9.4) (2026-04-12)
+
+
+### Bug Fixes
+
+* Add missing resources tools([#68](https://github.com/ValueArchitectsAI/sop-mcp/issues/68)) ([6a5b0dc](https://github.com/ValueArchitectsAI/sop-mcp/commit/6a5b0dcfda3743d256ea00599123f9a55bf8f9dc))
+
 ## [0.9.3](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.9.2...v0.9.3) (2026-04-12)
 
 
