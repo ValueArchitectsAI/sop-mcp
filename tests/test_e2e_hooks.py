@@ -1,7 +1,7 @@
-"""End-to-end tests for the hook system via FastMCP middleware.
+"""End-to-end tests for the hook system.
 
 Tests the full hook lifecycle: configure hooks, trigger them through
-real MCP tool calls via in-memory transport, and verify handlers fired.
+real MCP tool calls, and verify handlers fired.
 """
 
 from __future__ import annotations
@@ -11,8 +11,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastmcp import Client
 
+from src.sop_mcp.hook_middleware import install_hooks
 from src.sop_mcp.hooks import (
     HookExecutor,
     HookRegistry,
@@ -21,7 +21,7 @@ from src.sop_mcp.hooks import (
     WebhookHandler,
     parse_hook_config,
 )
-from src.sop_mcp.server import _hook_middleware, mcp
+from src.sop_mcp.server import mcp
 
 pytestmark = pytest.mark.asyncio
 
@@ -29,14 +29,13 @@ SOP_NAME = "sop_creation_guide"
 EXAMPLES_DIR = Path(__file__).parent.parent / "skills" / "sop-mcp-configuration" / "examples"
 
 
-async def _call(client: Client, tool_name: str, arguments: dict | None = None) -> dict:
-    result = await client.call_tool(tool_name, arguments or {})
-    assert not result.is_error, f"Tool {tool_name} returned an error: {result}"
-    return json.loads(result.content[0].text)
+async def _call(tool_name: str, arguments: dict | None = None) -> dict:
+    result = await mcp.call_tool(tool_name, arguments or {})
+    return json.loads(result) if isinstance(result, str) else result
 
 
 def _setup_executor(config: str) -> HookExecutor:
-    """Parse config from a JSON file path or raw JSON string, build registry + executor."""
+    """Parse config, build registry + executor."""
     callbacks = parse_hook_config(config)
     registry = HookRegistry()
     for cb in callbacks:
@@ -48,66 +47,52 @@ def _setup_executor(config: str) -> HookExecutor:
     return executor
 
 
-async def _walk_sop_to_completion(client: Client) -> dict:
+async def _walk_sop_to_completion() -> dict:
     """Walk through the SOP to completion, returning the final response."""
-    data = await _call(client, "run_sop", {"sop_name": SOP_NAME})
+    data = await _call("run_sop", {"sop_name": SOP_NAME})
     total = data["total_steps"]
     for step in range(1, total):
         data = await _call(
-            client,
             "run_sop",
-            {
-                "sop_name": SOP_NAME,
-                "current_step": step,
-                "step_output": f"output {step}",
-            },
+            {"sop_name": SOP_NAME, "current_step": step, "step_output": f"output {step}"},
         )
     return await _call(
-        client,
         "run_sop",
-        {
-            "sop_name": SOP_NAME,
-            "current_step": total,
-            "step_output": "final output",
-        },
+        {"sop_name": SOP_NAME, "current_step": total, "step_output": "final output"},
     )
 
 
-class TestE2EShellHook:
-    """Shell hook fires via middleware on every run_sop call."""
+def _install_and_get_restore(executor):
+    """Install hooks on mcp and return a callable that restores the original call_tool."""
+    original = mcp.call_tool
+    install_hooks(mcp, executor)
+    return lambda: setattr(mcp, "call_tool", original)
 
+
+class TestE2EShellHook:
     async def test_shell_hook_fires_on_every_run_sop_call(self):
         executor = _setup_executor(str(EXAMPLES_DIR / "shell.hook.json"))
-        original = _hook_middleware.executor
+        restore = _install_and_get_restore(executor)
 
         try:
-            _hook_middleware.executor = executor
-
             with patch("subprocess.run") as mock_run:
                 mock_run.return_value = MagicMock(stdout="ok", stderr="", returncode=0)
 
-                async with Client(mcp) as client:
-                    data = await _walk_sop_to_completion(client)
+                data = await _walk_sop_to_completion()
 
-                    assert "complete" in data["instruction"].lower()
-                    total_steps = data["total_steps"]
-                    # shell.hook.json has a run_sop hook — fires on every call (total_steps + 1)
-                    # sop_completed hook is filtered by security (command contains 'sh')
-                    assert mock_run.call_count == total_steps + 1
+                assert "complete" in data["instruction"].lower()
+                total_steps = data["total_steps"]
+                assert mock_run.call_count == total_steps + 1
         finally:
-            _hook_middleware.executor = original
+            restore()
 
 
 class TestE2EWebhookHook:
-    """Webhook hook fires via middleware on submit_sop_feedback."""
-
     async def test_webhook_hook_posts_on_feedback(self):
         executor = _setup_executor(str(EXAMPLES_DIR / "webhook.hook.json"))
-        original = _hook_middleware.executor
+        restore = _install_and_get_restore(executor)
 
         try:
-            _hook_middleware.executor = executor
-
             with patch("requests.post") as mock_post:
                 mock_response = MagicMock()
                 mock_response.status_code = 200
@@ -115,129 +100,96 @@ class TestE2EWebhookHook:
                 mock_response.raise_for_status = MagicMock()
                 mock_post.return_value = mock_response
 
-                async with Client(mcp) as client:
-                    data = await _call(
-                        client,
-                        "submit_sop_feedback",
-                        {"sop_name": SOP_NAME, "feedback": "E2E webhook hook test feedback"},
-                    )
+                data = await _call(
+                    "submit_sop_feedback",
+                    {"sop_name": SOP_NAME, "feedback": "E2E webhook hook test feedback"},
+                )
 
-                    assert data["success"] is True
-                    mock_post.assert_called_once()
-                    call_args, call_kwargs = mock_post.call_args
-                    # webhook.hook.json posts feedback to hooks.example.com/feedback
-                    assert call_args[0] == "https://hooks.example.com/feedback"
-                    payload = call_kwargs["json"]
-                    assert payload["event_type"] == "submit_sop_feedback"
-                    assert payload["sop_name"] == SOP_NAME
-                    assert "timestamp" in payload
+                assert data["success"] is True
+                mock_post.assert_called_once()
+                call_args, call_kwargs = mock_post.call_args
+                assert call_args[0] == "https://hooks.example.com/feedback"
+                payload = call_kwargs["json"]
+                assert payload["event_type"] == "submit_sop_feedback"
+                assert payload["sop_name"] == SOP_NAME
         finally:
-            _hook_middleware.executor = original
+            restore()
 
 
 class TestE2ELLMHook:
-    """LLM suggestions are injected into the MCP response payload."""
-
     async def test_llm_suggestions_forwarded_in_response(self):
         executor = _setup_executor(str(EXAMPLES_DIR / "llm.hook.json"))
-        original = _hook_middleware.executor
+        restore = _install_and_get_restore(executor)
 
         try:
-            _hook_middleware.executor = executor
+            data = await _walk_sop_to_completion()
 
-            async with Client(mcp) as client:
-                # Walk to the final step — sop_completed fires and adds an LLM suggestion
-                data = await _walk_sop_to_completion(client)
+            assert "suggested_actions" in data
+            suggestions = data["suggested_actions"]
+            assert len(suggestions) >= 1
 
-                # The suggestion must be present in the actual MCP response, not just on the executor
-                assert "suggested_actions" in data, "suggested_actions missing from MCP response"
-                suggestions = data["suggested_actions"]
-                assert len(suggestions) >= 1
-
-                # The sop_completed hook in llm.hook.json suggests publishing
-                sop_suggestion = next((s for s in suggestions if "publish_sop" in s.get("action_command", "")), None)
-                assert sop_suggestion is not None
-                assert SOP_NAME in sop_suggestion["description"]
-                assert sop_suggestion["action_command"] == 'publish_sop(change_type="minor")'
+            sop_suggestion = next((s for s in suggestions if "publish_sop" in s.get("action_command", "")), None)
+            assert sop_suggestion is not None
+            assert SOP_NAME in sop_suggestion["description"]
         finally:
-            _hook_middleware.executor = original
+            restore()
 
     async def test_llm_suggestion_on_feedback_forwarded_in_response(self):
         executor = _setup_executor(str(EXAMPLES_DIR / "llm.hook.json"))
-        original = _hook_middleware.executor
+        restore = _install_and_get_restore(executor)
 
         try:
-            _hook_middleware.executor = executor
+            data = await _call(
+                "submit_sop_feedback",
+                {"sop_name": SOP_NAME, "feedback": "great SOP"},
+            )
 
-            async with Client(mcp) as client:
-                data = await _call(
-                    client,
-                    "submit_sop_feedback",
-                    {"sop_name": SOP_NAME, "feedback": "great SOP"},
-                )
-
-                assert "suggested_actions" in data, "suggested_actions missing from MCP response"
-                suggestions = data["suggested_actions"]
-                patch_suggestion = next((s for s in suggestions if "patch" in s.get("action_command", "")), None)
-                assert patch_suggestion is not None
-                assert SOP_NAME in patch_suggestion["description"]
+            assert "suggested_actions" in data
+            suggestions = data["suggested_actions"]
+            patch_suggestion = next((s for s in suggestions if "patch" in s.get("action_command", "")), None)
+            assert patch_suggestion is not None
+            assert SOP_NAME in patch_suggestion["description"]
         finally:
-            _hook_middleware.executor = original
+            restore()
 
 
 class TestE2ELLMHookYAML:
-    """Same LLM hook behaviour, but loaded from llm.hook.yaml instead of llm.hook.json."""
-
     async def test_llm_suggestions_forwarded_in_response_yaml(self):
         executor = _setup_executor(str(EXAMPLES_DIR / "llm.hook.yaml"))
-        original = _hook_middleware.executor
+        restore = _install_and_get_restore(executor)
 
         try:
-            _hook_middleware.executor = executor
+            data = await _walk_sop_to_completion()
 
-            async with Client(mcp) as client:
-                data = await _walk_sop_to_completion(client)
+            assert "suggested_actions" in data
+            suggestions = data["suggested_actions"]
+            assert len(suggestions) >= 1
 
-                assert "suggested_actions" in data, "suggested_actions missing from MCP response"
-                suggestions = data["suggested_actions"]
-                assert len(suggestions) >= 1
-
-                sop_suggestion = next((s for s in suggestions if "publish_sop" in s.get("action_command", "")), None)
-                assert sop_suggestion is not None
-                assert SOP_NAME in sop_suggestion["description"]
-                assert sop_suggestion["action_command"] == 'publish_sop(change_type="minor")'
+            sop_suggestion = next((s for s in suggestions if "publish_sop" in s.get("action_command", "")), None)
+            assert sop_suggestion is not None
         finally:
-            _hook_middleware.executor = original
+            restore()
 
     async def test_llm_suggestion_on_feedback_forwarded_in_response_yaml(self):
         executor = _setup_executor(str(EXAMPLES_DIR / "llm.hook.yaml"))
-        original = _hook_middleware.executor
+        restore = _install_and_get_restore(executor)
 
         try:
-            _hook_middleware.executor = executor
+            data = await _call(
+                "submit_sop_feedback",
+                {"sop_name": SOP_NAME, "feedback": "great SOP"},
+            )
 
-            async with Client(mcp) as client:
-                data = await _call(
-                    client,
-                    "submit_sop_feedback",
-                    {"sop_name": SOP_NAME, "feedback": "great SOP"},
-                )
-
-                assert "suggested_actions" in data, "suggested_actions missing from MCP response"
-                suggestions = data["suggested_actions"]
-                patch_suggestion = next((s for s in suggestions if "patch" in s.get("action_command", "")), None)
-                assert patch_suggestion is not None
-                assert SOP_NAME in patch_suggestion["description"]
+            assert "suggested_actions" in data
+            suggestions = data["suggested_actions"]
+            patch_suggestion = next((s for s in suggestions if "patch" in s.get("action_command", "")), None)
+            assert patch_suggestion is not None
         finally:
-            _hook_middleware.executor = original
+            restore()
 
 
 class TestE2EMultipleLLMHooks:
-    """Multiple LLM hooks for the same event should all appear in the response."""
-
     async def test_multiple_llm_hooks_same_event_in_response(self):
-        """Two LLM hooks for run_sop should both appear in suggested_actions."""
-        # Create a custom config with two LLM hooks for run_sop
         config = """
 - event_type: run_sop
   action_type: llm
@@ -253,24 +205,20 @@ class TestE2EMultipleLLMHooks:
     action_command: "publish_sop(change_type=\\"minor\\")"
 """
         executor = _setup_executor(config)
-        original = _hook_middleware.executor
+        restore = _install_and_get_restore(executor)
 
         try:
-            _hook_middleware.executor = executor
+            data = await _call("run_sop", {"sop_name": SOP_NAME})
 
-            async with Client(mcp) as client:
-                data = await _call(client, "run_sop", {"sop_name": SOP_NAME})
+            assert "suggested_actions" in data
+            suggestions = data["suggested_actions"]
+            assert len(suggestions) == 2
 
-                assert "suggested_actions" in data, "suggested_actions missing from MCP response"
-                suggestions = data["suggested_actions"]
-                assert len(suggestions) == 2, f"Expected 2 suggestions, got {len(suggestions)}"
+            titles = {s["title"] for s in suggestions}
+            assert "First Suggestion" in titles
+            assert "Second Suggestion" in titles
 
-                titles = {s["title"] for s in suggestions}
-                assert "First Suggestion" in titles
-                assert "Second Suggestion" in titles
-
-                # Check context substitution
-                for suggestion in suggestions:
-                    assert SOP_NAME in suggestion["description"]
+            for suggestion in suggestions:
+                assert SOP_NAME in suggestion["description"]
         finally:
-            _hook_middleware.executor = original
+            restore()

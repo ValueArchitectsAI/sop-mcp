@@ -1,35 +1,25 @@
-"""SOP MCP Server - Main business logic.
+"""SOP MCP Server — stdio entry point.
 
-This module contains the MCP server with FileSystemProvider-discovered
-tools (run_sop, publish_sop, submit_sop_feedback) and dynamically
-registered SOP resources.
+Run with: ``uvx sop-mcp`` or ``uv run sop-mcp``
 """
 
 import logging
 import os
-from pathlib import Path
 
-from fastmcp import FastMCP
-from fastmcp.server.providers import FileSystemProvider
-from fastmcp.server.transforms import ResourcesAsTools
-
+from src.sop_mcp.hook_middleware import install_hooks
 from src.sop_mcp.resources.sop_content import register_sop_resources
-from src.sop_mcp.tools.publish_sop import EPHEMERAL_WARNING, publish_sop  # noqa: F401
-from src.sop_mcp.tools.run_sop import run_sop  # noqa: F401
-from src.sop_mcp.tools.submit_sop_feedback import submit_sop_feedback  # noqa: F401
+from src.sop_mcp.tools import publish_sop, run_sop, submit_sop_feedback
 from src.sop_mcp.utils import get_storage_backend
+from src.sop_mcp.utils.stdiomcp import StdioMCP
 
 logger = logging.getLogger(__name__)
 
-# Initialize storage backend at module level (Requirement 6.1)
+# Initialize storage backend at module level
 backend = get_storage_backend()
 
 
 def _init_hooks():
-    """Bootstrap the hook system if SOP_HOOK_CONFIG is set.
-
-    Returns the HookExecutor instance (or None if hooks are disabled).
-    """
+    """Bootstrap the hook system if SOP_HOOK_CONFIG is set."""
     from src.sop_mcp.hooks import (
         HookExecutor,
         HookRegistry,
@@ -63,25 +53,18 @@ def _init_hooks():
     return executor
 
 
-_hook_executor = _init_hooks()
+# Initialize MCP server
+mcp = StdioMCP("SOP MCP Server")
 
-# Initialize FastMCP server with FileSystemProvider for static tools
-mcp = FastMCP(
-    "SOP MCP Server",
-    providers=[FileSystemProvider(Path(__file__).parent)],
-)
+# Register tools
+for _mod in (run_sop, publish_sop, submit_sop_feedback):
+    mcp.tool(name=_mod.NAME, description=_mod.DESCRIPTION)(_mod.handler)
 
-# Add hook middleware (fires events after tool calls)
-from src.sop_mcp.hook_middleware import HookMiddleware  # noqa: E402
-
-_hook_middleware = HookMiddleware(executor=_hook_executor)
-mcp.add_middleware(_hook_middleware)
-
-# Register concrete SOP resources for discoverability
+# Register SOP resources for discoverability
 register_sop_resources(mcp)
 
-# Expose resources as tools for clients that lack resource protocol support
-mcp.add_transform(ResourcesAsTools(mcp))
+# Install hook system (no-op if SOP_HOOK_CONFIG not set)
+install_hooks(mcp, _init_hooks())
 
 
 def run():

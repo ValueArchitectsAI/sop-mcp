@@ -22,9 +22,9 @@ SOP_NAME = "sop_creation_guide"
 
 
 async def call_tool(name: str, arguments: dict | None = None) -> dict:
-    """Helper: call a FastMCP tool and return the structured result dict."""
+    """Helper: call an MCP tool and return the structured result dict."""
     result = await mcp.call_tool(name, arguments or {})
-    return json.loads(result.content[0].text)
+    return json.loads(result) if isinstance(result, str) else result
 
 
 async def call_run_sop(sop_name: str = SOP_NAME, **kwargs) -> dict:
