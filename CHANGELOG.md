@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.3](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.9.2...v0.9.3) (2026-04-12)
+
+
+### Bug Fixes
+
+* replace fastmcp with StdioMCP — zero C-dependencies ([#66](https://github.com/ValueArchitectsAI/sop-mcp/issues/66)) ([42c4dd1](https://github.com/ValueArchitectsAI/sop-mcp/commit/42c4dd1227ba5ba36fac79c88d1ad7f0d71ec34b))
+
 ## [0.9.2](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.9.1...v0.9.2) (2026-04-06)
 
 
