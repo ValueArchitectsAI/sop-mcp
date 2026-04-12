@@ -100,10 +100,12 @@ class StdioMCP:
     a JSON-RPC 2.0 event loop over stdio.
     """
 
-    def __init__(self, name: str = "MCP Server", **kwargs: Any) -> None:
+    def __init__(self, name: str = "MCP Server", resources_as_tools: bool = True, **kwargs: Any) -> None:
         self.name = name
         self._tools: dict[str, _ToolInfo] = {}
         self._resources: dict[str, _ResourceInfo] = {}
+        self._resources_as_tools = resources_as_tools
+        self._resource_tools_registered = False
 
     # ------------------------------------------------------------------
     # Registration API (matches fastmcp)
@@ -147,6 +149,7 @@ class StdioMCP:
 
     async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
         """Call a registered tool by name. Returns JSON-serialisable result."""
+        self._ensure_resource_tools()
         if name not in self._tools:
             raise ValueError(f"Unknown tool: {name}")
         tool = self._tools[name]
@@ -157,6 +160,7 @@ class StdioMCP:
 
     async def list_tools(self) -> list[Any]:
         """Return tool descriptors (used by tests)."""
+        self._ensure_resource_tools()
         return [
             type("Tool", (), {"name": t.name, "description": t.description, "inputSchema": t.input_schema})()
             for t in self._tools.values()
@@ -187,8 +191,15 @@ class StdioMCP:
         """Start the MCP server on stdio."""
         if transport != "stdio":
             raise ValueError(f"Only stdio transport is supported, got: {transport}")
+        self._ensure_resource_tools()
         logger.info("Starting %s (lite stdio)", self.name)
         self._stdio_loop()
+
+    def _ensure_resource_tools(self) -> None:
+        """Register resource tools if enabled and not yet registered."""
+        if self._resources_as_tools and not self._resource_tools_registered and self._resources:
+            self._register_resource_tools()
+            self._resource_tools_registered = True
 
     def _stdio_loop(self) -> None:
         """Read JSON-RPC requests from stdin, write responses to stdout."""
@@ -314,3 +325,30 @@ class StdioMCP:
         resp = {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
         sys.stdout.write(json.dumps(resp) + "\n")
         sys.stdout.flush()
+
+    def _register_resource_tools(self) -> None:
+        """Auto-register list_resources and read_resource as tools."""
+        resources = self._resources
+
+        def _list() -> dict:
+            return {
+                "resources": [
+                    {"uri": r.uri, "name": r.name, "description": r.description, "mimeType": r.mime_type}
+                    for r in resources.values()
+                ]
+            }
+
+        def _read(uri: str) -> dict:
+            if uri not in resources:
+                raise ValueError(f"Unknown resource URI: {uri}. Use list_resources to see available URIs.")
+            r = resources[uri]
+            return {"uri": uri, "mimeType": r.mime_type, "content": r.fn()}
+
+        self.tool(
+            name="list_resources",
+            description="List all available resources with their URIs and descriptions.",
+        )(_list)
+        self.tool(
+            name="read_resource",
+            description="Read a resource by its URI.",
+        )(_read)
