@@ -47,8 +47,8 @@ def install_hooks(mcp_server: Any, executor: Optional[Any]) -> None:
                 result_data = json.loads(result)
             elif isinstance(result, dict):
                 result_data = result
-        except (json.JSONDecodeError, TypeError):
-            pass
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.debug("Failed to parse tool result for '%s'; using empty context data: %s", name, e)
 
         ctx = _extract_context(name, arguments, result_data)
 
