@@ -1,12 +1,9 @@
-"""Publish SOP tool — discovered by FileSystemProvider."""
+"""Publish SOP tool."""
 
 import logging
 import re
 from enum import Enum
-from typing import Annotated, Any
-
-from fastmcp.tools import tool
-from pydantic import Field
+from typing import Any
 
 from src.sop_mcp.utils import SOP, ChangeType
 from src.sop_mcp.utils.sop_parser import _parse_semver, _set_version_in_content
@@ -34,59 +31,34 @@ EPHEMERAL_WARNING = (
     "variable to a persistent path to avoid data loss."
 )
 
-
-@tool(
-    description=(
-        "Publish a new or updated Standard Operating Procedure document.\n\n"
-        "The content parameter MUST contain the complete SOP markdown string. "
-        "Pass the entire document as a single string value — do not omit it or pass an empty object.\n\n"
-        'Example call: {"content": "# My SOP\\n\\n## Document Information\\n- **Document ID**: '
-        "my_sop_name\\n- **Version**: 1.0.0\\n\\n## Overview\\nDescription.\\n\\n"
-        '### Step 1: First step\\nDo the thing.", "change_type": "minor", "scope": "personal"}\n\n'
-        "The SOP name is extracted from the Document ID field in the content. "
-        "The version is auto-bumped based on change_type. "
-        "New SOPs always start at v1.0.0.\n\n"
-        "SOPs are published as personal (private) by default. Use scope='shared' for team-wide SOPs."
-    ),
+NAME = "publish_sop"
+DESCRIPTION = (
+    "Publish a new or updated Standard Operating Procedure document.\n\n"
+    "The content parameter MUST contain the complete SOP markdown string. "
+    "Pass the entire document as a single string value — do not omit it or pass an empty object.\n\n"
+    'Example call: {"content": "# My SOP\\n\\n## Document Information\\n- **Document ID**: '
+    "my_sop_name\\n- **Version**: 1.0.0\\n\\n## Overview\\nDescription.\\n\\n"
+    '### Step 1: First step\\nDo the thing.", "change_type": "minor", "scope": "personal"}\n\n'
+    "The SOP name is extracted from the Document ID field in the content. "
+    "The version is auto-bumped based on change_type. "
+    "New SOPs always start at v1.0.0.\n\n"
+    "SOPs are published as personal (private) by default. Use scope='shared' for team-wide SOPs."
 )
-def publish_sop(
-    content: Annotated[
-        str,
-        Field(
-            min_length=1,
-            description=(
-                "The complete SOP markdown document as a string. "
-                "Must include: a # title, **Document ID** (lowercase_with_underscores, 3+ words), "
-                "**Version**, ## Overview section, and at least one ### Step N: section."
-            ),
-        ),
-    ],
-    change_type: Annotated[
-        ChangeType,
-        Field(
-            default=ChangeType.MINOR,
-            description="Semver bump type: major (breaking), minor (feature), patch (bugfix).",
-        ),
-    ] = ChangeType.MINOR,
-    scope: Annotated[
-        Scope,
-        Field(
-            default=Scope.PERSONAL,
-            description="Scope: 'personal' for user-specific SOPs, 'shared' for team-wide SOPs",
-        ),
-    ] = Scope.PERSONAL,
-) -> dict[str, Any]:
-    """Publish a new or updated SOP document.
 
-    The SOP name is extracted from the content (the Document ID field).
-    The version is auto-bumped based on the change_type using semantic versioning.
-    For brand-new SOPs the initial version is 1.0.0 regardless of change_type.
-    """
+
+def handler(
+    content: str,
+    change_type: str = "minor",
+    scope: str = "personal",
+) -> dict[str, Any]:
+    """Publish a new or updated SOP document."""
+    ct = ChangeType(change_type) if isinstance(change_type, str) else change_type
+    sc = Scope(scope) if isinstance(scope, str) else scope
     logger.info(
         "Invoking publish_sop with args: content=<%s chars>, change_type=%s, scope=%s",
         len(content),
-        change_type.value,
-        scope.value,
+        ct.value,
+        sc.value,
     )
 
     try:
@@ -103,14 +75,14 @@ def publish_sop(
         parts = list(_parse_semver(latest))
         while len(parts) < 3:
             parts.append(0)
-        if change_type is ChangeType.MAJOR:
+        if ct is ChangeType.MAJOR:
             parts[0] += 1
             parts[1] = 0
             parts[2] = 0
-        elif change_type is ChangeType.MINOR:
+        elif ct is ChangeType.MINOR:
             parts[1] += 1
             parts[2] = 0
-        elif change_type is ChangeType.PATCH:
+        elif ct is ChangeType.PATCH:
             parts[2] += 1
         new_version = ".".join(str(p) for p in parts)
 
@@ -129,11 +101,11 @@ def publish_sop(
         "sop_name": sop.name,
         "title": sop.title,
         "version": new_version,
-        "change_type": change_type.value,
-        "scope": scope.value,
+        "change_type": ct.value,
+        "scope": sc.value,
         "total_steps": sop.total_steps,
         "message": (
-            f"SOP '{sop.name}' published as v{new_version} ({change_type.value}) with {scope.value} scope. "
+            f"SOP '{sop.name}' published as v{new_version} ({ct.value}) with {sc.value} scope. "
             "Restart the server to register the new tool."
         ),
     }

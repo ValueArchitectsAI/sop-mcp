@@ -1,11 +1,8 @@
-"""Submit SOP feedback tool — discovered by FileSystemProvider."""
+"""Submit SOP feedback tool."""
 
 import logging
 from datetime import datetime, timezone
-from typing import Annotated, Any
-
-from fastmcp.tools import tool
-from pydantic import Field
+from typing import Any
 
 from src.sop_mcp.utils import SOP
 from src.sop_mcp.utils.storage import LocalFilesystemBackend
@@ -22,11 +19,18 @@ EPHEMERAL_WARNING = (
     "variable to a persistent path to avoid data loss."
 )
 
+NAME = "submit_sop_feedback"
+DESCRIPTION = (
+    "Submit improvement feedback for a specific SOP.\n\n"
+    "Collects user feedback about an SOP and stores it in a feedback.md file\n"
+    "inside the SOP's folder. This feedback will be used to optimize the SOP\n"
+    "in its next revision."
+)
 
-@tool()
-def submit_sop_feedback(
-    sop_name: Annotated[str, Field(description="Name of the SOP.")],
-    feedback: Annotated[str, Field(min_length=1, description="The improvement suggestion or feedback text.")],
+
+def handler(
+    sop_name: str,
+    feedback: str,
 ) -> dict[str, Any]:
     """Submit improvement feedback for a specific SOP.
 

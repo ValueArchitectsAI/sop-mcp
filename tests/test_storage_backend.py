@@ -198,24 +198,24 @@ def test_ephemeral_warning_iff_ephemeral_backend(
         content = _build_sop_content(doc_id, overview, step_body)
 
         # --- publish_sop ---
-        publish_result = server_module.publish_sop(content)
+        publish_result = publish_module.handler(content)
         assert publish_result.get("success") is True, f"publish_sop failed: {publish_result}"
 
         if is_ephemeral:
             assert "warning" in publish_result, "Expected ephemeral warning in publish result"
-            assert server_module.EPHEMERAL_WARNING in publish_result["warning"]
+            assert publish_module.EPHEMERAL_WARNING in publish_result["warning"]
         else:
-            assert server_module.EPHEMERAL_WARNING not in publish_result.get("warning", "")
+            assert publish_module.EPHEMERAL_WARNING not in publish_result.get("warning", "")
 
         # --- submit_sop_feedback ---
-        feedback_result = server_module.submit_sop_feedback(doc_id, feedback_text)
+        feedback_result = feedback_module.handler(doc_id, feedback_text)
         assert feedback_result.get("success") is True, f"submit_sop_feedback failed: {feedback_result}"
 
         if is_ephemeral:
             assert "warning" in feedback_result, "Expected ephemeral warning in feedback result"
-            assert server_module.EPHEMERAL_WARNING in feedback_result["warning"]
+            assert feedback_module.EPHEMERAL_WARNING in feedback_result["warning"]
         else:
-            assert server_module.EPHEMERAL_WARNING not in feedback_result.get("warning", "")
+            assert feedback_module.EPHEMERAL_WARNING not in feedback_result.get("warning", "")
     finally:
         server_module.backend = original_server_backend
         feedback_module.backend = original_feedback_backend

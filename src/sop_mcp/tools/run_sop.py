@@ -1,9 +1,7 @@
 """Start or advance a Standard Operating Procedure."""
 
 import logging
-from typing import Annotated, Any
-
-from fastmcp.tools import tool
+from typing import Any
 
 from src.sop_mcp.utils import SOP
 from src.sop_mcp.utils.storage import LocalFilesystemBackend
@@ -12,29 +10,24 @@ logger = logging.getLogger(__name__)
 
 backend = LocalFilesystemBackend.from_env()
 
-
-@tool(
-    description=(
-        "Start or advance a Standard Operating Procedure step by step. "
-        "Use list_resources to discover available SOPs, then call this tool with the SOP name.\n\n"
-        "Each call returns one step. Execute the step, then call again with current_step "
-        "incremented to advance.\n\n"
-        "IMPORTANT: You MUST execute ALL actions described in the returned step content. "
-        "Do NOT just read or summarize the step — perform the actions using your available tools.\n\n"
-        "When continuing (current_step >= 1), you MUST provide step_output with the concrete "
-        "output you produced for the completed step."
-    ),
+NAME = "run_sop"
+DESCRIPTION = (
+    "Start or advance a Standard Operating Procedure step by step. "
+    "Use list_resources to discover available SOPs, then call this tool with the SOP name.\n\n"
+    "Each call returns one step. Execute the step, then call again with current_step "
+    "incremented to advance.\n\n"
+    "IMPORTANT: You MUST execute ALL actions described in the returned step content. "
+    "Do NOT just read or summarize the step — perform the actions using your available tools.\n\n"
+    "When continuing (current_step >= 1), you MUST provide step_output with the concrete "
+    "output you produced for the completed step."
 )
-def run_sop(
-    sop_name: Annotated[str, "Name of the SOP to execute."],
-    current_step: Annotated[int, "The step to advance from. 0 to start."] = 0,
-    version: Annotated[str | None, "Semantic version to run. Defaults to latest."] = None,
-    step_output: Annotated[
-        str | None,
-        "The concrete output you produced for the completed step. "
-        "Include all specific values, names, dates, and details. "
-        "Required when current_step >= 1, omit when starting (current_step=0).",
-    ] = None,
+
+
+def handler(
+    sop_name: str,
+    current_step: int = 0,
+    version: str | None = None,
+    step_output: str | None = None,
 ) -> dict[str, Any]:
     """Start or advance an SOP — returns the next step."""
     logger.info("Invoking run_sop: sop_name=%s, current_step=%s, version=%s", sop_name, current_step, version)
