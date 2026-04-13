@@ -190,10 +190,10 @@ def test_ephemeral_warning_iff_ephemeral_backend(
 
     original_server_backend = server_module.backend
     original_feedback_backend = feedback_module.backend
-    original_publish_get_backend = publish_module._get_backend
+    original_publish_backend = publish_module.backend
     server_module.backend = test_backend
     feedback_module.backend = test_backend
-    publish_module._get_backend = lambda: test_backend
+    publish_module.backend = test_backend
     try:
         content = _build_sop_content(doc_id, overview, step_body)
 
@@ -219,4 +219,4 @@ def test_ephemeral_warning_iff_ephemeral_backend(
     finally:
         server_module.backend = original_server_backend
         feedback_module.backend = original_feedback_backend
-        publish_module._get_backend = original_publish_get_backend
+        publish_module.backend = original_publish_backend
