@@ -39,17 +39,16 @@ class TestSopOverviewExtraction:
 
     def test_overview_contains_expected_content(self):
         sop = SOP("sop_creation_guide")
-        assert "Standard Operating Procedure" in sop.overview
         assert "RFC 2119" in sop.overview
 
 
 class TestSopStepExtraction:
     """Test that SOP extracts all steps correctly."""
 
-    def test_extracts_all_eight_steps(self):
+    def test_extracts_all_steps(self):
         sop = SOP("sop_creation_guide")
         assert isinstance(sop.steps, list)
-        assert len(sop.steps) == 8
+        assert len(sop.steps) == 5
 
     def test_steps_are_strings(self):
         sop = SOP("sop_creation_guide")
@@ -61,15 +60,15 @@ class TestSopStepExtraction:
         sop = SOP("sop_creation_guide")
         assert "Step 1:" in sop.steps[0]
         assert "Step 2:" in sop.steps[1]
-        assert "Step 8:" in sop.steps[7]
+        assert "Step 5:" in sop.steps[4]
 
-    def test_first_step_is_prepare_for_sop_creation(self):
+    def test_first_step_is_gather_process_information(self):
         sop = SOP("sop_creation_guide")
-        assert "Prepare for SOP Creation" in sop.steps[0]
+        assert "Gather Process Information" in sop.steps[0]
 
     def test_total_steps_property(self):
         sop = SOP("sop_creation_guide")
-        assert sop.total_steps == 8
+        assert sop.total_steps == 5
 
 
 class TestSopProperties:

@@ -67,7 +67,7 @@ class TestResourceDiscovery:
     async def test_list_resources_description_contains_overview(self):
         resources = await mcp.list_resources()
         sop_res = next(r for r in resources if str(r.uri) == f"sop://{SOP_NAME}")
-        assert "Standard Operating Procedure" in sop_res.description
+        assert "RFC 2119" in sop_res.description
 
 
 class TestReadResource:
