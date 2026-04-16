@@ -7,8 +7,12 @@ from typing import Any
 
 from src.sop_mcp.utils import SOP, ChangeType
 from src.sop_mcp.utils.sop_parser import _parse_semver, _set_version_in_content
+from src.sop_mcp.utils.storage import LocalFilesystemBackend
 
 logger = logging.getLogger(__name__)
+
+
+backend = LocalFilesystemBackend.from_env()
 
 
 class Scope(Enum):
@@ -16,13 +20,6 @@ class Scope(Enum):
 
     PERSONAL = "personal"
     SHARED = "shared"
-
-
-def _get_backend():
-    """Lazy import to use the same backend instance as src.server (supports test patching)."""
-    import src.sop_mcp.server
-
-    return src.sop_mcp.server.backend
 
 
 EPHEMERAL_WARNING = (
@@ -67,7 +64,7 @@ def handler(
         logger.warning("publish_sop error: %s", e)
         return {"error": str(e)}
 
-    existing_versions = _get_backend().list_versions(sop.name)
+    existing_versions = backend.list_versions(sop.name)
     if not existing_versions:
         new_version = "1.0.0"
     else:
@@ -88,7 +85,7 @@ def handler(
 
     content = _set_version_in_content(content, new_version)
     try:
-        _get_backend().write_sop(sop.name, new_version, content)
+        backend.write_sop(sop.name, new_version, content)
     except OSError as e:
         logger.warning("publish_sop error: %s", e)
         return {"error": str(e)}
@@ -110,7 +107,7 @@ def handler(
         ),
     }
     warnings = []
-    if _get_backend().is_ephemeral:
+    if backend.is_ephemeral:
         warnings.append(EPHEMERAL_WARNING)
     steps_missing_time = [i + 1 for i, step in enumerate(sop.steps) if "**Time Estimate:**" not in step]
     if steps_missing_time:
