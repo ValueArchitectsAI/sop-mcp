@@ -83,14 +83,23 @@ class _ToolInfo:
 class _ResourceInfo:
     """Internal resource registration."""
 
-    __slots__ = ("uri", "name", "description", "mime_type", "fn")
+    __slots__ = ("uri", "name", "description", "mime_type", "fn", "is_binary")
 
-    def __init__(self, uri: str, name: str, description: str, mime_type: str, fn: Callable) -> None:
+    def __init__(
+        self,
+        uri: str,
+        name: str,
+        description: str,
+        mime_type: str,
+        fn: Callable,
+        is_binary: bool = False,
+    ) -> None:
         self.uri = uri
         self.name = name
         self.description = description
         self.mime_type = mime_type
         self.fn = fn
+        self.is_binary = is_binary
 
 
 class StdioMCP:
@@ -135,11 +144,17 @@ class StdioMCP:
         name: str = "",
         description: str = "",
         mime_type: str = "text/plain",
+        is_binary: bool = False,
     ) -> Callable:
-        """Register a function as an MCP resource (decorator factory)."""
+        """Register a function as an MCP resource (decorator factory).
+
+        When ``is_binary`` is true, the handler function MUST return
+        ``bytes`` and ``resources/read`` emits them as a base64 blob per
+        the MCP spec.  Text resources continue to return ``str``.
+        """
 
         def decorator(fn: Callable) -> Callable:
-            self._resources[uri] = _ResourceInfo(uri, name, description, mime_type, fn)
+            self._resources[uri] = _ResourceInfo(uri, name, description, mime_type, fn, is_binary)
             return fn
 
         return decorator
@@ -344,12 +359,22 @@ class StdioMCP:
         if uri not in self._resources:
             return self._rpc_error(req_id, -32602, f"Unknown resource: {uri}")
 
+        resource = self._resources[uri]
         try:
-            text = self._resources[uri].fn()
-            contents = [{"uri": uri, "mimeType": self._resources[uri].mime_type, "text": text}]
-            return self._rpc_result(req_id, {"contents": contents})
+            payload = resource.fn()
         except Exception as e:
             return self._rpc_error(req_id, -32603, str(e))
+
+        content: dict[str, Any] = {"uri": uri, "mimeType": resource.mime_type}
+        if resource.is_binary:
+            import base64
+
+            if isinstance(payload, str):
+                payload = payload.encode("utf-8")
+            content["blob"] = base64.b64encode(payload).decode("ascii")
+        else:
+            content["text"] = payload
+        return self._rpc_result(req_id, {"contents": [content]})
 
     # ------------------------------------------------------------------
     # JSON-RPC helpers

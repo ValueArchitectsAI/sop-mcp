@@ -5,11 +5,17 @@ Walks the storage backend, maps every discovered SOP to an
 found during the scan.  Safe to call repeatedly — the previous
 ``sop://*`` registrations are cleared before re-scanning so callers can
 trigger a refresh after ``publish_sop`` without restarting the server.
+
+In addition to the SOP document itself, any files dropped into the
+sidecar folder next to the SOP are exposed as ``sop://{name}/{rel_path}``
+resources so MCP clients can read attachments (checklists, rubrics,
+images, …) alongside the main markdown.
 """
 
 from __future__ import annotations
 
 import logging
+import mimetypes
 from typing import Any
 
 from .storage_backend import get_storage_backend
@@ -20,18 +26,44 @@ logger = logging.getLogger(__name__)
 SOP_URI_SCHEME = "sop://"
 
 
+# MIME types that should be treated as text (base64 is unnecessary and
+# hurts readability).  Anything else falls back to a binary blob.
+_TEXT_MIME_PREFIXES = ("text/",)
+_TEXT_MIME_TYPES = {
+    "application/json",
+    "application/xml",
+    "application/yaml",
+    "application/x-yaml",
+    "application/toml",
+    "application/javascript",
+    "image/svg+xml",
+}
+
+
+def _is_text_mime(mime: str) -> bool:
+    if mime.startswith(_TEXT_MIME_PREFIXES):
+        return True
+    return mime in _TEXT_MIME_TYPES
+
+
+def _guess_mime(path: str) -> str:
+    mime, _ = mimetypes.guess_type(path)
+    return mime or "application/octet-stream"
+
+
 def register_sop_resources(
     mcp: Any,
     *,
     backend: Any = None,
     notify: bool = False,
 ) -> list[str]:
-    """Register one MCP resource per discovered SOP.
+    """Register one MCP resource per discovered SOP plus its attachments.
 
     Returns the duplicate-name warnings produced by the scan (empty list
     when the tree is clean).  When ``notify`` is true and the MCP server
-    exposes a ``notify_resources_list_changed`` helper, the notification
-    is emitted after registration so clients can refresh their view.
+    exposes the corresponding notifiers, ``resources/list_changed`` is
+    emitted once and ``resources/updated`` is emitted per registered URI
+    so subscribed clients observe both structural and content changes.
 
     ``backend`` is an optional storage backend — when omitted the
     process-wide default from ``get_storage_backend()`` is used.  Callers
@@ -60,7 +92,7 @@ def register_sop_resources(
 
         description = sop.description or sop.truncated_overview
 
-        def _make_reader(name: str):
+        def _make_sop_reader(name: str):
             def read() -> str:
                 return backend.read_sop(name)
 
@@ -73,7 +105,39 @@ def register_sop_resources(
             name=sop_name,
             description=description,
             mime_type="text/markdown",
-        )(_make_reader(sop_name))
+        )(_make_sop_reader(sop_name))
+
+        # Register any attachments dropped into the sidecar folder.
+        try:
+            attachments = backend.list_attachments(sop_name)
+        except AttributeError:
+            attachments = []  # backend predates sidecar support
+        for rel_path in attachments:
+            mime = _guess_mime(rel_path)
+            is_binary = not _is_text_mime(mime)
+            uri = f"{SOP_URI_SCHEME}{sop_name}/{rel_path}"
+
+            def _make_attachment_reader(name: str, rel: str, binary: bool):
+                if binary:
+
+                    def read() -> bytes:
+                        return backend.read_attachment(name, rel)
+                else:
+
+                    def read() -> str:
+                        return backend.read_attachment(name, rel).decode("utf-8")
+
+                read.__name__ = f"read_{name}_{rel}".replace("/", "_").replace(".", "_")
+                read.__doc__ = f"Read attachment '{rel}' of the {name} SOP."
+                return read
+
+            mcp.resource(
+                uri,
+                name=f"{sop_name}/{rel_path}",
+                description=f"Attachment '{rel_path}' for SOP '{sop_name}'",
+                mime_type=mime,
+                is_binary=is_binary,
+            )(_make_attachment_reader(sop_name, rel_path, is_binary))
 
     warnings = backend.duplicate_name_warnings
     for msg in warnings:

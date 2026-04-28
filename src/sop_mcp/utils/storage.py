@@ -234,6 +234,61 @@ class LocalFilesystemBackend:
         """Public helper — return the on-disk path of an SOP by name."""
         return self._sop_path(name)
 
+    # --- Sidecar attachments ---
+
+    # Files/directories to never expose as attachments.
+    _ATTACHMENT_BLACKLIST = {"__pycache__", ".DS_Store"}
+
+    def _attachment_dir(self, name: str) -> Path | None:
+        """Return the sidecar folder for an SOP, or ``None`` if none exists.
+
+        The sidecar shares the stem of the ``.sop.md`` file.  For an SOP
+        stored at ``{base}/teams/eng/code_review.sop.md``, the sidecar is
+        ``{base}/teams/eng/code_review/``.
+        """
+        sop_path = self._sop_path(name)
+        if sop_path is None:
+            return None
+        candidate = sop_path.parent / name
+        return candidate if candidate.is_dir() else None
+
+    def list_attachments(self, name: str) -> list[str]:
+        """Return sorted relative paths of every attachment under the sidecar.
+
+        Returns an empty list when the SOP has no sidecar folder.  Skips
+        hidden files (``.foo``) and entries in ``_ATTACHMENT_BLACKLIST`` so
+        cache dirs and editor metadata don't leak into ``resources/list``.
+        """
+        sidecar = self._attachment_dir(name)
+        if sidecar is None:
+            return []
+
+        found: list[str] = []
+        for path in sorted(sidecar.rglob("*")):
+            if not path.is_file():
+                continue
+            rel = path.relative_to(sidecar)
+            if any(part in self._ATTACHMENT_BLACKLIST or part.startswith(".") for part in rel.parts):
+                continue
+            found.append(rel.as_posix())
+        return found
+
+    def read_attachment(self, name: str, relative_path: str) -> bytes:
+        """Read an attachment's raw bytes by SOP name and relative path."""
+        sidecar = self._attachment_dir(name)
+        if sidecar is None:
+            raise FileNotFoundError(f"No sidecar folder for SOP '{name}'")
+
+        target = (sidecar / relative_path).resolve()
+        try:
+            target.relative_to(sidecar.resolve())
+        except ValueError as exc:
+            raise ValueError(f"Attachment path '{relative_path}' escapes the sidecar folder") from exc
+
+        if not target.is_file():
+            raise FileNotFoundError(f"Attachment '{relative_path}' not found under SOP '{name}'")
+        return target.read_bytes()
+
     # --- Feedback (JSONL) ---
 
     def _feedback_path(self, name: str) -> Path:
