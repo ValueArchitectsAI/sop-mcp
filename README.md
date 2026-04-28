@@ -8,8 +8,8 @@ An MCP server that guides AI agents through Standard Operating Procedures (SOPs)
 
 ## Quick Install
 
-| Kiro | Cursor | VS Code |
-|:---:|:---:|:---:|
+|                                                                                            Kiro                                                                                            |                                                                                         Cursor                                                                                         |                                                                                                                                                      VS Code                                                                                                                                                      |
+| :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: |
 | [![Add to Kiro](https://kiro.dev/images/add-to-kiro.svg)](https://kiro.dev/launch/mcp/add?name=sop-mcp&config=%7B%22command%22%3A%20%22uvx%22%2C%20%22args%22%3A%20%5B%22sop-mcp%22%5D%7D) | [![Install MCP Server](https://cursor.com/deeplink/mcp-install-light.svg)](https://cursor.com/en/install-mcp?name=sop-mcp&config=eyJjb21tYW5kIjogInV2eCIsICJhcmdzIjogWyJzb3AtbWNwIl19) | [![Install on VS Code](https://img.shields.io/badge/Install_on-VS_Code-007ACC?style=flat-square&logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=sop-mcp&config=%7B%22type%22%3A%20%22stdio%22%2C%20%22command%22%3A%20%22uvx%22%2C%20%22args%22%3A%20%5B%22sop-mcp%22%5D%7D) |
 
 Or add manually to any MCP client:
@@ -43,11 +43,11 @@ Every response includes an `instruction` field that tells the agent to *act*, no
 
 ## Tools
 
-| Tool | Description |
-|------|-------------|
-| `publish_sop` | Publish a new or updated SOP with automatic semver bumping |
-| `submit_sop_feedback` | Submit improvement feedback for a specific SOP |
-| `run_sop` | Step-by-step execution of any SOP, with `sop_name` parameter |
+| Tool                  | Description                                                  |
+| --------------------- | ------------------------------------------------------------ |
+| `publish_sop`         | Publish a new or updated SOP with automatic semver bumping   |
+| `submit_sop_feedback` | Submit improvement feedback for a specific SOP               |
+| `run_sop`             | Step-by-step execution of any SOP, with `sop_name` parameter |
 
 ## Skills
 
@@ -61,11 +61,11 @@ sop-mcp includes an optional hook system that triggers external actions (shell c
 
 SOPs are exposed as MCP resources, so agents can list and read them before starting execution.
 
-| Method | URI | Description |
-|--------|-----|-------------|
-| `list_resources` | — | Returns all available SOPs with name, version, step count, and overview |
-| `read_resource` | `sop://{sop_name}` | Read the full latest SOP markdown |
-| `read_resource` | `sop://{sop_name}?version=1.0` | Read a specific version |
+| Method           | URI                            | Description                                                             |
+| ---------------- | ------------------------------ | ----------------------------------------------------------------------- |
+| `list_resources` | —                              | Returns all available SOPs with name, version, step count, and overview |
+| `read_resource`  | `sop://{sop_name}`             | Read the full latest SOP markdown                                       |
+| `read_resource`  | `sop://{sop_name}?version=1.0` | Read a specific version                                                 |
 
 For clients that don't support the MCP resource protocol, resources are also exposed as tools automatically via `ResourcesAsTools`.
 
@@ -134,12 +134,12 @@ sop-mcp uses local filesystem storage for SOP persistence.
 
 The hook system uses FastMCP middleware to fire events on every tool call. Event names match tool names directly — no mapping needed.
 
-| Event Name | Triggered When | Description |
-|------------|-----------------|-------------|
-| `run_sop` | Every `run_sop()` call | Fires on every step |
-| `publish_sop` | Every `publish_sop()` call | Fires on publish attempts |
-| `submit_sop_feedback` | Every `submit_sop_feedback()` call | Fires on feedback submissions |
-| `sop_completed` | `run_sop()` final step | Bonus event when `current_step == total_steps` |
+| Event Name            | Triggered When                     | Description                                    |
+| --------------------- | ---------------------------------- | ---------------------------------------------- |
+| `run_sop`             | Every `run_sop()` call             | Fires on every step                            |
+| `publish_sop`         | Every `publish_sop()` call         | Fires on publish attempts                      |
+| `submit_sop_feedback` | Every `submit_sop_feedback()` call | Fires on feedback submissions                  |
+| `sop_completed`       | `run_sop()` final step             | Bonus event when `current_step == total_steps` |
 
 ### Local Filesystem (default)
 
@@ -177,24 +177,20 @@ Use RFC 2119 keywords (MUST, SHOULD, MAY) to define requirement levels.
 
 ## Publishing
 
-Call `publish_sop` with the full markdown content and a `change_type`:
-
-| Type | Effect | Example |
-|------|--------|---------|
-| `major` | Breaking change | 1.2.0 → 2.0.0 |
-| `minor` | New feature | 1.2.0 → 1.3.0 |
-| `patch` | Bugfix | 1.2.0 → 1.2.1 |
-
-New SOPs always start at v1.0.0.
+Call `publish_sop` with the full markdown content and the target `stage`
+(`preprod` or `prod`).  The tool computes the next integer version
+automatically — new SOPs start at `1` and each subsequent publish bumps
+by one.  Optional `path` routes writes under a subdirectory
+(e.g. `generated/`), but identity remains the frontmatter `name`.
 
 ## SOP Naming Convention
 
-| Element | Format | Example |
-|---------|--------|---------|
-| Folder name | lowercase, underscores | `sop_creation_guide` |
-| Document ID | same as folder name | `sop_creation_guide` |
-| Tool name | `run_sop` with `sop_name=` folder name | `run_sop(sop_name="sop_creation_guide")` |
-| Version file | `v` + semver | `v1.0.0.md` |
+| Element            | Format                              | Example                                  |
+| ------------------ | ----------------------------------- | ---------------------------------------- |
+| File name          | `{name}.sop.md`                     | `sop_creation_guide.sop.md`              |
+| Frontmatter `name` | lowercase, underscores, ≥3 segments | `sop_creation_guide`                     |
+| MCP resource URI   | `sop://{name}`                      | `sop://sop_creation_guide`               |
+| Tool call          | `run_sop` with `sop_name=`          | `run_sop(sop_name="sop_creation_guide")` |
 
 ## Development
 

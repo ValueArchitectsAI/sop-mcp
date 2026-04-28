@@ -11,40 +11,45 @@ This matters because agents tend to summarize or skip steps when given a full pr
 ## Project Layout
 
 ```
-src/
-├── server.py                  # MCP server, tool handlers, dynamic registration
-├── sops/                      # SOP storage (one folder per SOP)
-│   └── sop_creation_guide/
-│       ├── v1.0.md            # versioned SOP document
-│       └── feedback.md        # collected user feedback
-└── utils/
-    ├── __init__.py            # re-exports
-    ├── sop_parser.py          # SOP class, markdown parsing, versioning
-    ├── storage_backend.py     # StorageBackend protocol (interface)
-    └── storage.py             # LocalFilesystemBackend implementation
-├── hook_middleware.py         # FastMCP middleware for hook events
-└── mcp/
-    └── hooks.py               # HookRegistry, HookExecutor, handlers
+src/sop_mcp/
+├── server.py                  # MCP server entrypoint, tool + resource registration
+├── resources/                 # bundled SOPs (each a flat `{name}.sop.md` file)
+│   ├── sop_creation_guide.sop.md
+│   ├── code_review_process.sop.md
+│   └── …
+├── tools/
+│   ├── publish_sop.py         # write/bump an SOP
+│   ├── run_sop.py             # advance through a specific SOP
+│   └── submit_sop_feedback.py # append feedback alongside the SOP
+├── utils/
+│   ├── __init__.py            # re-exports
+│   ├── sop_parser.py          # SOP dataclass, frontmatter + markdown parsing
+│   ├── storage.py             # LocalFilesystemBackend (recursive scan)
+│   ├── storage_backend.py     # backend factory
+│   ├── resource_registration.py  # registers sop://{name} MCP resources
+│   └── stdiomcp/              # lightweight JSON-RPC stdio MCP server
+├── hook_middleware.py         # hook-system middleware
+└── hooks.py                   # HookRegistry, HookExecutor, handlers
 
 tests/
-├── test_handler.py            # server tool tests (async, FastMCP)
-├── test_parser.py             # parser unit tests
-├── test_storage_backend.py    # property-based storage tests (hypothesis)
-└── test_e2e_hooks.py          # end-to-end hook tests via MCP transport
+├── test_publish_sop.py        # publish_sop contract tests (MCP client)
+├── test_run_sop.py            # run_sop contract tests (MCP client)
+├── test_submit_sop_feedback.py  # feedback tool contract tests (MCP client)
+├── test_sop_parser.py         # parser unit tests
+├── test_storage_*.py          # storage backend unit + property tests
+└── test_e2e_hooks.py          # end-to-end hook tests
 ```
 
 ## Naming Convention
 
-Everything derives from the folder name. No mapping logic, no transformations.
+Everything derives from the frontmatter `name:` field.
 
-| Element | Rule | Example |
-|---------|------|---------|
-| Folder | lowercase, underscores, min 3 words | `sop_creation_guide` |
-| Document ID | same as folder | `sop_creation_guide` |
-| Tool name | `run_sop` with `sop_name=` folder | `run_sop(sop_name="sop_creation_guide")` |
-| Version file | `v` + semver + `.md` | `v1.0.md`, `v2.1.0.md` |
-
-The Document ID is declared in the markdown: `**Document ID**: sop_creation_guide`
+| Element      | Rule                                | Example                                  |
+| ------------ | ----------------------------------- | ---------------------------------------- |
+| Frontmatter  | lowercase, underscores, min 3 words | `sop_creation_guide`                     |
+| File         | `{name}.sop.md`                     | `sop_creation_guide.sop.md`              |
+| Tool call    | `run_sop` with `sop_name=` name     | `run_sop(sop_name="sop_creation_guide")` |
+| Resource URI | `sop://{name}`                      | `sop://sop_creation_guide`               |
 
 The regex enforcing this: `[a-z][a-z0-9]*(?:_[a-z0-9]+){2,}` — starts with a letter, at least 3 underscore-separated segments.
 
@@ -52,7 +57,7 @@ The regex enforcing this: `[a-z][a-z0-9]*(?:_[a-z0-9]+){2,}` — starts with a l
 
 ### Static tools (always registered)
 
-`publish_sop(content, change_type)` — Validates markdown, auto-bumps version, writes to storage. Returns a reminder to restart the server. `change_type` is `major`, `minor`, or `patch`.
+`publish_sop(content, scope?, path?)` — Validates markdown, auto-bumps the integer version, writes the flat `{name}.sop.md` file, and re-registers the `sop://{name}` MCP resource. No restart required.
 
 `submit_sop_feedback(sop_name, feedback)` — Appends timestamped feedback to `{sop_name}/feedback.md`. Intended to be offered to the user after completing an SOP run.
 
@@ -63,7 +68,7 @@ The regex enforcing this: `[a-z][a-z0-9]*(?:_[a-z0-9]+){2,}` — starts with a l
 - `sop_name` + no other args → returns step 1 + overview
 - `current_step=N` + `step_output="..."` → returns step N+1 (meaning: "I finished step N, here's my output, give me the next one")
 - `current_step=total` + `step_output="..."` → returns completion signal
-- `version="1.0"` → pins to a specific version instead of latest
+- `version=1` → pins to a specific version instead of latest
 - `step_output` is required when `current_step >= 1`, omit when starting
 
 Every response includes an `instruction` field that explicitly tells the agent to execute the step content, not just read it.
@@ -114,23 +119,27 @@ When using a custom `SOP_STORAGE_DIR`, the backend copies bundled SOPs into it o
 Required elements for a valid SOP:
 
 ```markdown
-# Title                                    ← level-1 heading (required)
+---
+name: my_sop_name          ← lowercase, underscores, 3+ words (required)
+owner: my-team             ← non-empty string; team, alias, or email (required)
+stage: preprod             ← preprod | prod (set by publish_sop; overwritten on write)
+version: 1                 ← positive integer (set by publish_sop; overwritten on write)
+description: One-liner.    ← optional; falls back to the Overview section
+---
 
-## Document Information
-- **Document ID**: my_sop_name             ← lowercase, underscores, 3+ words (required)
-- **Version**: 1.0.0                       ← semver (required)
+# Title                    ← level-1 heading (required)
 
-## Overview                                ← required section
+## Overview                ← required section
 Description of what this SOP does.
 
-## Prerequisites                           ← optional section
+## Prerequisites           ← optional section
 - Any general prerequisites...
 
-**Required MCP Servers** (should):         ← SHOULD-level field
+**Required MCP Servers** (should):   ← SHOULD-level field
 - server_name
 - another_server — optional description
 
-### Step 1: First Step Title               ← at least one step required
+### Step 1: First Step Title         ← at least one step required
 Step content with RFC 2119 keywords...
 
 ### Step 2: Second Step Title
@@ -147,13 +156,13 @@ RFC 2119 keywords define requirement levels within steps.
 
 All SOPs use these keywords. Use them with care and sparingly.
 
-| Keyword | Meaning |
-|---------|---------|
-| **MUST** / **REQUIRED** / **SHALL** | Absolute requirement. Non-negotiable. |
-| **MUST NOT** / **SHALL NOT** | Absolute prohibition. Never allowed. |
-| **SHOULD** / **RECOMMENDED** | Strong recommendation. Valid reasons may exist to deviate, but full implications must be understood first. |
-| **SHOULD NOT** / **NOT RECOMMENDED** | Discouraged. Valid reasons may exist when the behavior is acceptable, but weigh carefully. |
-| **MAY** / **OPTIONAL** | Truly optional. Implementations with or without the option must interoperate. |
+| Keyword                              | Meaning                                                                                                    |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| **MUST** / **REQUIRED** / **SHALL**  | Absolute requirement. Non-negotiable.                                                                      |
+| **MUST NOT** / **SHALL NOT**         | Absolute prohibition. Never allowed.                                                                       |
+| **SHOULD** / **RECOMMENDED**         | Strong recommendation. Valid reasons may exist to deviate, but full implications must be understood first. |
+| **SHOULD NOT** / **NOT RECOMMENDED** | Discouraged. Valid reasons may exist when the behavior is acceptable, but weigh carefully.                 |
+| **MAY** / **OPTIONAL**               | Truly optional. Implementations with or without the option must interoperate.                              |
 
 Guidelines:
 - MUST only be used where required for interoperation or to limit harmful behavior
@@ -166,39 +175,37 @@ Reference: [RFC 2119](https://datatracker.ietf.org/doc/html/rfc2119)
 
 ## Versioning
 
-Versions are stored as separate files: `v1.0.0.md`, `v1.1.0.md`, etc. Publishing never overwrites — it creates a new file.
-
-- New SOP → always `v1.0.0`
-- `major` → X+1.0.0
-- `minor` → X.Y+1.0
-- `patch` → X.Y.Z+1
-
-Latest version is resolved by comparing semver tuples, not by file modification time.
+Versions are plain positive integers: `1`, `2`, `3`, … — no semver.  New
+SOPs start at `1`; each `publish_sop` call bumps by one.  The frontmatter
+is stored inside the single ``{name}.sop.md`` file and ``publish_sop``
+overwrites the ``version:`` field on every write, so authors don't have
+to hand-manage it.
 
 ## Parsing
 
-All parsing is regex-based in `sop_parser.py`:
+All parsing is regex + PyYAML-based in `sop_parser.py`:
 
 - Title: first `# ` heading
 - Overview: content between `## Overview` and the next `##`
 - Steps: all `### Step N: ...` blocks
-- Version: `**Version:** X.Y.Z` or `**Version**: X.Y.Z` (also supports table format)
-- Document ID: `**Document ID**: lowercase_name`
+- Frontmatter: YAML block at the top of the file; ``name`` / ``version``
+  / ``owner`` / ``stage`` / optional ``description``
 
-If any required element is missing, a `ValueError` is raised with a descriptive message.
+If any required element is missing, a `ValueError` is raised with a
+descriptive message.
 
 ## Testing
 
 ```bash
-uv run pytest                          # all tests
-uv run pytest tests/test_handler.py    # server/tool tests
-uv run pytest tests/test_parser.py     # parser tests
-uv run pytest tests/test_storage_backend.py  # property-based storage tests
+uv run pytest                                  # all tests
+uv run pytest tests/test_publish_sop.py        # publish_sop contract tests
+uv run pytest tests/test_run_sop.py            # run_sop contract tests
+uv run pytest tests/test_sop_parser.py         # parser unit tests
 ```
 
-- `test_handler.py` — async tests using `mcp.call_tool()` directly. Covers tool registration, step navigation, version handling, error cases.
-- `test_parser.py` — synchronous tests for `SOP` class, `from_content()`, `list_available_sops()`.
-- `test_storage_backend.py` — hypothesis property-based tests for write-read round trips, listing correctness, ephemeral warnings, path validation.
+- `test_publish_sop.py`, `test_run_sop.py`, `test_submit_sop_feedback.py` — contract tests against the MCP tools, driven via a subprocess MCP client harness.
+- `test_sop_parser.py` — synchronous unit tests for `SOP`, `from_content()`, `list_available_sops()`.
+- `test_storage_*.py` — LocalFilesystemBackend edge-case + property-based tests for write-read round trips, listing correctness, ephemeral warnings, path validation.
 
 ## Build & Run
 
@@ -222,7 +229,7 @@ uvx sop-mcp                # run via uvx (once published)
 
 4. **`step_output` forces concrete work** — When continuing (`current_step >= 1`), the agent must provide `step_output` with its concrete work product. The server doesn't store it — it exists to force detailed output into the conversation history.
 
-4. **Versions as files** — Git-friendly, no database, easy to inspect. Semver sorting by filename.
+4. **Versions as integers** — `1`, `2`, `3`, … stored in frontmatter. Git-friendly, no database, trivial to bump.
 
 5. **Storage abstraction** — `StorageBackend` protocol allows swapping implementations. Currently only local filesystem, but the protocol is ready for S3, DynamoDB, etc.
 
@@ -245,18 +252,18 @@ Format:
 
 Types and their effect on versioning:
 
-| Type | Version Bump | When to use |
-|------|-------------|-------------|
-| `feat` | minor | New feature or capability |
-| `fix` | patch | Bug fix |
-| `feat!` or `BREAKING CHANGE:` in body | major | Breaking change |
-| `docs` | none | Documentation only |
-| `style` | none | Formatting, no logic change |
-| `refactor` | none | Code change, no new feature or fix |
-| `perf` | patch | Performance improvement |
-| `test` | none | Adding or fixing tests |
-| `chore` | none | Build process, tooling |
-| `ci` | none | CI/CD changes |
+| Type                                  | Version Bump | When to use                        |
+| ------------------------------------- | ------------ | ---------------------------------- |
+| `feat`                                | minor        | New feature or capability          |
+| `fix`                                 | patch        | Bug fix                            |
+| `feat!` or `BREAKING CHANGE:` in body | major        | Breaking change                    |
+| `docs`                                | none         | Documentation only                 |
+| `style`                               | none         | Formatting, no logic change        |
+| `refactor`                            | none         | Code change, no new feature or fix |
+| `perf`                                | patch        | Performance improvement            |
+| `test`                                | none         | Adding or fixing tests             |
+| `chore`                               | none         | Build process, tooling             |
+| `ci`                                  | none         | CI/CD changes                      |
 
 Rules:
 - Use imperative mood: "add" not "added" or "adds"
@@ -302,4 +309,4 @@ On every PR to `main` (from within the repo), a dev build is published to TestPy
 
 **Adding a storage backend**: Implement the `StorageBackend` protocol from `storage_backend.py`. Update `get_storage_backend()` in `storage.py` to select it.
 
-**Renaming an SOP**: Rename the folder in `src/sops/`, update the `**Document ID**:` field in the markdown to match. The `sop_name` parameter value updates automatically on restart.
+**Renaming an SOP**: Rename the file in `src/sop_mcp/resources/` (or your `SOP_STORAGE_DIR`) to match, and update the frontmatter `name:` field. The next publish picks up the new identity automatically.
