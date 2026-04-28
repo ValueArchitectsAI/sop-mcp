@@ -104,6 +104,7 @@ class StdioMCP:
         self.name = name
         self._tools: dict[str, _ToolInfo] = {}
         self._resources: dict[str, _ResourceInfo] = {}
+        self._subscriptions: set[str] = set()
         self._resources_as_tools = resources_as_tools
         self._resource_tools_registered = False
 
@@ -197,6 +198,27 @@ class StdioMCP:
             # (e.g. unit tests) — best-effort, never raise.
             logger.debug("Could not emit resources/list_changed notification")
 
+    def notify_resource_updated(self, uri: str) -> None:
+        """Emit ``notifications/resources/updated`` for a subscribed URI only.
+
+        Per the MCP spec, this notification is scoped to clients that have
+        explicitly subscribed to the URI via ``resources/subscribe``.  We
+        skip the write entirely when no subscription exists so quiet URIs
+        don't produce stdio noise.
+        """
+        if uri not in self._subscriptions:
+            return
+        notification = {
+            "jsonrpc": "2.0",
+            "method": "notifications/resources/updated",
+            "params": {"uri": uri},
+        }
+        try:
+            sys.stdout.write(json.dumps(notification) + "\n")
+            sys.stdout.flush()
+        except (BrokenPipeError, ValueError):
+            logger.debug("Could not emit resources/updated notification for %s", uri)
+
     # ------------------------------------------------------------------
     # JSON-RPC stdio transport
     # ------------------------------------------------------------------
@@ -248,7 +270,7 @@ class StdioMCP:
                     "protocolVersion": PROTOCOL_VERSION,
                     "capabilities": {
                         "tools": {"listChanged": False},
-                        "resources": {"subscribe": False, "listChanged": False},
+                        "resources": {"subscribe": True, "listChanged": True},
                     },
                     "serverInfo": {"name": self.name, "version": "1.0.0"},
                 },
@@ -285,6 +307,18 @@ class StdioMCP:
 
         if method == "resources/read":
             return self._handle_resource_read(params, req_id)
+
+        if method == "resources/subscribe":
+            uri = params.get("uri", "")
+            if not uri:
+                return self._rpc_error(req_id, -32602, "Missing 'uri' parameter")
+            self._subscriptions.add(uri)
+            return self._rpc_result(req_id, {})
+
+        if method == "resources/unsubscribe":
+            uri = params.get("uri", "")
+            self._subscriptions.discard(uri)
+            return self._rpc_result(req_id, {})
 
         return self._rpc_error(req_id, -32601, f"Method not found: {method}")
 

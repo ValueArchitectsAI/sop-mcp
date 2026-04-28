@@ -87,4 +87,16 @@ def register_sop_resources(
             except Exception as exc:  # best-effort — never break publish on notify failure
                 logger.warning("Failed to emit resources/list_changed: %s", exc)
 
+        # Emit a per-URI updated notification for every registered SOP.  The
+        # MCP server suppresses URIs that nobody subscribed to, so this is
+        # cheap on the quiet path and correct on the subscribed path.
+        updated_notifier = getattr(mcp, "notify_resource_updated", None)
+        if callable(updated_notifier):
+            for uri in list(registry or ()):
+                if uri.startswith(SOP_URI_SCHEME):
+                    try:
+                        updated_notifier(uri)
+                    except Exception as exc:
+                        logger.warning("Failed to emit resources/updated for %s: %s", uri, exc)
+
     return warnings
