@@ -2,7 +2,6 @@
 
 Covers: seeding edge cases, directory creation, sop_exists,
 read_sop errors, and feedback operations.
-Requirements: 2.4, 3.2
 """
 
 from __future__ import annotations
@@ -14,9 +13,22 @@ import pytest
 from src.sop_mcp.utils.storage import LocalFilesystemBackend
 
 
-class TestSeedingEdgeCases:
-    """Requirement 3.2: seeding is skipped when seed_dir is empty or missing."""
+def _valid_sop(name: str, version: int = 1) -> str:
+    """Minimal SOP content that parses cleanly under the current parser."""
+    return (
+        "---\n"
+        f"name: {name}\n"
+        f"version: {version}\n"
+        "owner: tests\n"
+        "stage: preprod\n"
+        "---\n\n"
+        f"# Test SOP {name}\n\n"
+        "## Overview\n\nA minimal SOP used for unit tests.\n\n"
+        "### Step 1: Do the thing\n\nJust do it.\n"
+    )
 
+
+class TestSeedingEdgeCases:
     def test_empty_seed_directory_skips_seeding(self, tmp_path: Path) -> None:
         base = tmp_path / "store"
         seed = tmp_path / "seed"
@@ -28,7 +40,7 @@ class TestSeedingEdgeCases:
 
     def test_missing_seed_directory_skips_seeding(self, tmp_path: Path) -> None:
         base = tmp_path / "store"
-        seed = tmp_path / "nonexistent_seed"  # does not exist
+        seed = tmp_path / "nonexistent_seed"
 
         backend = LocalFilesystemBackend(base_dir=base, seed_dir=seed)
 
@@ -36,8 +48,6 @@ class TestSeedingEdgeCases:
 
 
 class TestDirectoryCreation:
-    """Requirement 2.4: storage directory is created on init."""
-
     def test_creates_base_dir_on_init(self, tmp_path: Path) -> None:
         base = tmp_path / "deep" / "nested" / "store"
         assert not base.exists()
@@ -50,15 +60,15 @@ class TestDirectoryCreation:
 class TestSopExists:
     def test_returns_true_for_existing_sop(self, tmp_path: Path) -> None:
         backend = LocalFilesystemBackend(base_dir=tmp_path)
-        backend.write_sop("my_sop", "1.0.0", "# content")
+        backend.write_sop("my_sop", 1, _valid_sop("my_sop"))
 
         assert backend.sop_exists("my_sop") is True
 
     def test_returns_true_for_existing_version(self, tmp_path: Path) -> None:
         backend = LocalFilesystemBackend(base_dir=tmp_path)
-        backend.write_sop("my_sop", "1.0.0", "# content")
+        backend.write_sop("my_sop", 1, _valid_sop("my_sop"))
 
-        assert backend.sop_exists("my_sop", "1.0.0") is True
+        assert backend.sop_exists("my_sop", 1) is True
 
     def test_returns_false_for_missing_sop(self, tmp_path: Path) -> None:
         backend = LocalFilesystemBackend(base_dir=tmp_path)
@@ -67,9 +77,9 @@ class TestSopExists:
 
     def test_returns_false_for_missing_version(self, tmp_path: Path) -> None:
         backend = LocalFilesystemBackend(base_dir=tmp_path)
-        backend.write_sop("my_sop", "1.0.0", "# content")
+        backend.write_sop("my_sop", 1, _valid_sop("my_sop"))
 
-        assert backend.sop_exists("my_sop", "9.9.9") is False
+        assert backend.sop_exists("my_sop", 99) is False
 
 
 class TestReadSopErrors:
@@ -81,10 +91,10 @@ class TestReadSopErrors:
 
     def test_raises_for_missing_version(self, tmp_path: Path) -> None:
         backend = LocalFilesystemBackend(base_dir=tmp_path)
-        backend.write_sop("my_sop", "1.0.0", "# v1")
+        backend.write_sop("my_sop", 1, _valid_sop("my_sop"))
 
         with pytest.raises(FileNotFoundError, match="Version.*not found"):
-            backend.read_sop("my_sop", "9.9.9")
+            backend.read_sop("my_sop", 99)
 
 
 class TestFeedbackOperations:
@@ -106,21 +116,18 @@ class TestFeedbackOperations:
 
         assert backend.read_feedback("my_sop") == "Second"
 
-    def test_append_feedback_creates_file_with_header(self, tmp_path: Path) -> None:
+    def test_append_feedback_creates_file(self, tmp_path: Path) -> None:
         backend = LocalFilesystemBackend(base_dir=tmp_path)
-        backend.append_feedback("my_sop", "Entry 1\n")
+        backend.append_feedback("my_sop", {"feedback": "Entry 1"})
 
         content = backend.read_feedback("my_sop")
         assert content is not None
-        assert "Feedback Log" in content
         assert "Entry 1" in content
 
     def test_append_feedback_appends_to_existing(self, tmp_path: Path) -> None:
         backend = LocalFilesystemBackend(base_dir=tmp_path)
-        backend.append_feedback("my_sop", "Entry 1\n")
-        backend.append_feedback("my_sop", "Entry 2\n")
+        backend.append_feedback("my_sop", {"feedback": "Entry 1"})
+        backend.append_feedback("my_sop", {"feedback": "Entry 2"})
 
-        content = backend.read_feedback("my_sop")
-        assert content is not None
-        assert "Entry 1" in content
-        assert "Entry 2" in content
+        entries = backend.read_feedback_entries("my_sop")
+        assert [e["feedback"] for e in entries] == ["Entry 1", "Entry 2"]

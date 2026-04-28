@@ -8,7 +8,6 @@ Tests the server.py implementation including:
 from __future__ import annotations
 
 import json
-import shutil
 import string
 
 import pytest
@@ -90,7 +89,7 @@ class TestSopToolStart:
     async def test_returns_sop_version(self):
         result = await call_run_sop()
         assert "sop_version" in result
-        assert isinstance(result["sop_version"], str)
+        assert isinstance(result["sop_version"], int)
 
     @pytest.mark.asyncio
     async def test_returns_instruction(self):
@@ -139,18 +138,18 @@ class TestSopToolVersionParameter:
 
     @pytest.mark.asyncio
     async def test_explicit_version_returns_matching_sop(self):
-        result = await call_run_sop(version="1.0")
-        assert result["sop_version"] == "1.0"
+        result = await call_run_sop(version=1)
+        assert result["sop_version"] == 1
 
     @pytest.mark.asyncio
     async def test_invalid_version_returns_error(self):
         with pytest.raises(Exception):
-            await call_run_sop(version="99.99.99")
+            await call_run_sop(version=99)
 
     @pytest.mark.asyncio
     async def test_version_with_step_navigation(self):
-        result = await call_run_sop(version="1.0", current_step=1, step_output="v1 output")
-        assert result["sop_version"] == "1.0"
+        result = await call_run_sop(version=1, current_step=1, step_output="v1 output")
+        assert result["sop_version"] == 1
         assert "Step 2" in result["instruction"]
 
     @pytest.mark.asyncio
@@ -191,9 +190,13 @@ _available_sops = st.sampled_from(backend.list_sops())
 def _build_sop_with_tool_refs_no_prereqs(doc_id: str, tool_name: str) -> str:
     """Build valid SOP content with a tool reference but NO Required MCP Servers field."""
     return (
+        "---\n"
+        f"name: {doc_id}\n"
+        "version: 1\n"
+        "owner: tests\n"
+        "stage: preprod\n"
+        "---\n\n"
         "# Test SOP With Tool Refs\n\n"
-        "## Document Information\n"
-        f"- **Document ID**: {doc_id}\n\n"
         "## Overview\n\nThis SOP tests tool reference detection.\n\n"
         f"### Step 1: Use the tool\n\n"
         f"Use the `{tool_name}` tool to perform the action.\n"
@@ -209,15 +212,17 @@ async def test_property_missing_mcp_server_prerequisites_produces_warning(
 ) -> None:
     """Publishing SOP with tool refs but no Required MCP Servers should warn."""
     content = _build_sop_with_tool_refs_no_prereqs(doc_id, tool_name)
-    sop_dir = BUNDLED_SOPS_DIR / doc_id
+    sop_file = BUNDLED_SOPS_DIR / f"{doc_id}.sop.md"
+    feedback_file = BUNDLED_SOPS_DIR / f"{doc_id}.feedback.jsonl"
     try:
         result = await call_tool("publish_sop", {"content": content})
         assert result.get("success") is True
         warning = result.get("warning", "")
         assert "Required MCP Servers" in warning
     finally:
-        if sop_dir.exists():
-            shutil.rmtree(sop_dir)
+        for path in (sop_file, feedback_file):
+            if path.exists():
+                path.unlink()
 
 
 @settings(max_examples=100, deadline=None)

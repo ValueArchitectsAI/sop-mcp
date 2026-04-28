@@ -5,8 +5,7 @@ import re
 from enum import Enum
 from typing import Any
 
-from src.sop_mcp.utils import SOP, ChangeType
-from src.sop_mcp.utils.sop_parser import _parse_semver, _set_version_in_content
+from src.sop_mcp.utils import SOP, register_sop_resources, set_version_in_content
 from src.sop_mcp.utils.storage import LocalFilesystemBackend
 
 logger = logging.getLogger(__name__)
@@ -31,31 +30,47 @@ EPHEMERAL_WARNING = (
 NAME = "publish_sop"
 DESCRIPTION = (
     "Publish a new or updated Standard Operating Procedure document.\n\n"
-    "The content parameter MUST contain the complete SOP markdown string. "
-    "Pass the entire document as a single string value — do not omit it or pass an empty object.\n\n"
-    'Example call: {"content": "# My SOP\\n\\n## Document Information\\n- **Document ID**: '
-    "my_sop_name\\n- **Version**: 1.0.0\\n\\n## Overview\\nDescription.\\n\\n"
-    '### Step 1: First step\\nDo the thing.", "change_type": "minor", "scope": "personal"}\n\n'
-    "The SOP name is extracted from the Document ID field in the content. "
-    "The version is auto-bumped based on change_type. "
-    "New SOPs always start at v1.0.0.\n\n"
-    "SOPs are published as personal (private) by default. Use scope='shared' for team-wide SOPs."
+    "The content parameter MUST contain the complete SOP markdown string with "
+    "YAML frontmatter declaring:\n"
+    "  - name   (required, snake_case, ≥3 underscore segments)\n"
+    "  - owner  (required, non-empty string — team, alias, or email)\n"
+    "  - stage  (required, 'preprod' or 'prod')\n"
+    "  - version (auto-managed by this tool; set to 1 for new SOPs)\n"
+    "  - description (optional — when omitted, the SOP's `## Overview` section "
+    "is used for short summaries)\n\n"
+    'Example call: {"content": "---\\nname: my_sop_name\\nversion: 1\\n'
+    "owner: my-team\\nstage: preprod\\n---\\n\\n"
+    "# My SOP\\n\\n## Overview\\nOverview text.\\n\\n"
+    '### Step 1: First step\\nDo the thing."}\n\n'
+    "Versioning: plain positive integers — 1, 2, 3, 4, … New SOPs start at 1; "
+    "each subsequent publish increments by one. No semver.\n\n"
+    "Layout: SOPs are stored flat in the storage directory by default. Pass an "
+    "optional `path` (e.g. 'generated/', 'teams/eng/') to group the file under "
+    "a subdirectory — identity is still the frontmatter `name`, so path is "
+    "organizational only. When an SOP with the same `name` already exists at a "
+    "different path, the publish is rejected to prevent duplicates; omit "
+    "`path` to update an existing SOP in place.\n\n"
+    "SOPs are published as personal (private) by default. Use scope='shared' "
+    "for team-wide SOPs."
 )
+
+
+def _bump(latest: int) -> int:
+    return latest + 1
 
 
 def handler(
     content: str,
-    change_type: str = "minor",
     scope: str = "personal",
+    path: str | None = None,
 ) -> dict[str, Any]:
     """Publish a new or updated SOP document."""
-    ct = ChangeType(change_type) if isinstance(change_type, str) else change_type
     sc = Scope(scope) if isinstance(scope, str) else scope
     logger.info(
-        "Invoking publish_sop with args: content=<%s chars>, change_type=%s, scope=%s",
+        "Invoking publish_sop with args: content=<%s chars>, scope=%s, path=%s",
         len(content),
-        ct.value,
         sc.value,
+        path,
     )
 
     try:
@@ -64,33 +79,33 @@ def handler(
         logger.warning("publish_sop error: %s", e)
         return {"error": str(e)}
 
-    existing_versions = backend.list_versions(sop.name)
-    if not existing_versions:
-        new_version = "1.0.0"
-    else:
-        latest = max(existing_versions, key=_parse_semver)
-        parts = list(_parse_semver(latest))
-        while len(parts) < 3:
-            parts.append(0)
-        if ct is ChangeType.MAJOR:
-            parts[0] += 1
-            parts[1] = 0
-            parts[2] = 0
-        elif ct is ChangeType.MINOR:
-            parts[1] += 1
-            parts[2] = 0
-        elif ct is ChangeType.PATCH:
-            parts[2] += 1
-        new_version = ".".join(str(p) for p in parts)
+    if not sop.owner:
+        return {"error": "Frontmatter `owner` is required and must be a non-empty string."}
 
-    content = _set_version_in_content(content, new_version)
+    existing_versions = backend.list_versions(sop.name)
+    new_version = 1 if not existing_versions else _bump(max(existing_versions))
+
     try:
-        backend.write_sop(sop.name, new_version, content)
-    except OSError as e:
+        content = set_version_in_content(content, new_version)
+    except ValueError as e:
+        return {"error": str(e)}
+
+    try:
+        written_path = backend.write_sop(sop.name, new_version, content, path=path)
+    except (OSError, ValueError) as e:
         logger.warning("publish_sop error: %s", e)
         return {"error": str(e)}
 
     sop = SOP.from_content(content)
+
+    # Surface the new SOP as an MCP resource immediately so clients see it
+    # without restarting the server.
+    try:
+        from src.sop_mcp.server import mcp as _mcp
+
+        register_sop_resources(_mcp, backend=backend, notify=True)
+    except Exception as exc:  # best-effort — never break publish on registration issues
+        logger.warning("Failed to re-register resources after publish: %s", exc)
 
     logger.info("publish_sop completed successfully")
     result: dict[str, Any] = {
@@ -98,13 +113,12 @@ def handler(
         "sop_name": sop.name,
         "title": sop.title,
         "version": new_version,
-        "change_type": ct.value,
+        "stage": sop.stage,
+        "owner": sop.owner,
         "scope": sc.value,
         "total_steps": sop.total_steps,
-        "message": (
-            f"SOP '{sop.name}' published as v{new_version} ({ct.value}) with {sc.value} scope. "
-            "Restart the server to register the new tool."
-        ),
+        "path": str(written_path.relative_to(backend.base_dir)),
+        "message": f"SOP '{sop.name}' published as v{new_version} with {sc.value} scope.",
     }
     warnings = []
     if backend.is_ephemeral:

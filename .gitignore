@@ -208,12 +208,12 @@ __marimo__/
 # Kiro
 .kiro/
 
-# SOPs - ignore all except sop_creation_guide
-src/sops/*
-!src/sops/sop_creation_guide/
-
 # SOP feedback files (generated at runtime by E2E tests and users)
 **/feedback.md
-src/sop_mcp/resources/*/*
-!src/sop_mcp/resources/sop_creation_guide/*
-src/sop_mcp/resources/sop_creation_guide/feedback.md
+src/sop_mcp/resources/*.feedback.jsonl
+
+# Ephemeral one-shot scripts (per workspace code-execution rules)
+tmp_*.py
+tmp_*.js
+tmp_*.sh
+tmp_*.awk

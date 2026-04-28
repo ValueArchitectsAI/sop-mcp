@@ -1,9 +1,14 @@
+---
+name: sop_creation_guide
+description: Step-by-step guide for creating SOPs using RFC 2119 requirement levels.
+  SOPs are delivered one step at a time to LLMs via MCP tool calls — each step MUST
+  be self-contained and describe what concrete…
+version: 1
+owner: value-architects
+stage: preprod
+---
 
 # Standard Operating Procedure: Creating Standard Operating Procedures
-
-## Document Information
-- **Document ID**: sop_creation_guide
-- **Version**: 1.4
 
 ## Overview
 Step-by-step guide for creating SOPs using RFC 2119 requirement levels. SOPs are delivered one step at a time to LLMs via MCP tool calls — each step MUST be self-contained and describe what concrete output is expected.
@@ -145,10 +150,10 @@ Step-by-step guide for creating SOPs using RFC 2119 requirement levels. SOPs are
 
 ## Revision History
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0 | Feb 7, 2026 | Initial release |
-| 1.1 | Feb 14, 2026 | Added Required MCP Servers guidance |
-| 1.2 | Feb 16, 2026 | Added Expected Output requirements, self-contained step guidance |
-| 1.3 | Feb 18, 2026 | Added feedback step, softened output guidance |
-| 1.4 | Apr 14, 2026 | Major trim: removed redundant sections (Scope, Definitions, Parameters, Quality Standards, RFC reference), consolidated 8 steps to 5, reduced from ~400 to ~150 lines |
+| Version | Date         | Changes                                                                                                                                                               |
+| ------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.0     | Feb 7, 2026  | Initial release                                                                                                                                                       |
+| 1.1     | Feb 14, 2026 | Added Required MCP Servers guidance                                                                                                                                   |
+| 1.2     | Feb 16, 2026 | Added Expected Output requirements, self-contained step guidance                                                                                                      |
+| 1.3     | Feb 18, 2026 | Added feedback step, softened output guidance                                                                                                                         |
+| 1.4     | Apr 14, 2026 | Major trim: removed redundant sections (Scope, Definitions, Parameters, Quality Standards, RFC reference), consolidated 8 steps to 5, reduced from ~400 to ~150 lines |

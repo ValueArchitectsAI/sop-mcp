@@ -97,9 +97,13 @@ class TestSopFromContent:
 
     def test_parses_valid_content(self):
         content = (
+            "---\n"
+            "name: my_test_sop\n"
+            "version: 1\n"
+            "owner: tests\n"
+            "stage: preprod\n"
+            "---\n\n"
             "# Test SOP\n\n"
-            "## Document Information\n"
-            "- **Document ID**: my_test_sop\n\n"
             "## Overview\n\nThis is a test SOP.\n\n"
             "### Step 1: Do something\n\nDo the thing.\n"
         )
@@ -115,7 +119,17 @@ class TestSopFromContent:
             SOP.from_content(content)
 
     def test_raises_for_missing_title(self):
-        content = "no heading\n\n- **Document ID**: bad_test_sop\n\n## Overview\n\nHello\n\n### Step 1: Do\n\nStuff\n"
+        content = (
+            "---\n"
+            "name: bad_test_sop\n"
+            "version: 1\n"
+            "owner: tests\n"
+            "stage: preprod\n"
+            "---\n\n"
+            "no heading\n\n"
+            "## Overview\n\nHello\n\n"
+            "### Step 1: Do\n\nStuff\n"
+        )
         with pytest.raises(ValueError, match="missing a title"):
             SOP.from_content(content)
 

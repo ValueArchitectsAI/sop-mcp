@@ -7,9 +7,8 @@ import logging
 import os
 
 from src.sop_mcp.hook_middleware import install_hooks
-from src.sop_mcp.resources.sop_content import register_sop_resources
 from src.sop_mcp.tools import publish_sop, run_sop, submit_sop_feedback
-from src.sop_mcp.utils import get_storage_backend
+from src.sop_mcp.utils import get_storage_backend, register_sop_resources
 from src.sop_mcp.utils.stdiomcp import StdioMCP
 
 logger = logging.getLogger(__name__)

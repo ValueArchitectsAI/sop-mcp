@@ -22,9 +22,10 @@ EPHEMERAL_WARNING = (
 NAME = "submit_sop_feedback"
 DESCRIPTION = (
     "Submit improvement feedback for a specific SOP.\n\n"
-    "Collects user feedback about an SOP and stores it in a feedback.md file\n"
-    "inside the SOP's folder. This feedback will be used to optimize the SOP\n"
-    "in its next revision."
+    "Feedback is appended as a single JSON line to\n"
+    "{sop_name}.feedback.jsonl alongside the SOP file. Each entry captures the\n"
+    "SOP version, a UTC timestamp, and the feedback text — ready for review\n"
+    "when the SOP is next revised."
 )
 
 
@@ -32,22 +33,21 @@ def handler(
     sop_name: str,
     feedback: str,
 ) -> dict[str, Any]:
-    """Submit improvement feedback for a specific SOP.
-
-    Collects user feedback about an SOP and stores it in a feedback.md file
-    inside the SOP's folder. This feedback will be used to optimize the SOP
-    in its next revision.
-    """
-    logger.info("Invoking submit_sop_feedback with args: sop_name=%s, feedback=<%s chars>", sop_name, len(feedback))
+    """Record feedback for an SOP as a JSON line in the feedback log."""
+    logger.info("Invoking submit_sop_feedback: sop_name=%s, feedback=<%s chars>", sop_name, len(feedback))
 
     if not backend.sop_exists(sop_name):
         raise ValueError(f"SOP '{sop_name}' not found. Available: {', '.join(backend.list_sops())}")
 
-    content = backend.read_sop(sop_name)
-    sop = SOP.from_content(content)
+    sop = SOP.from_content(backend.read_sop(sop_name))
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    entry = f"## Feedback — {timestamp}\n\n**SOP Version:** v{sop.version}\n\n{feedback}\n\n---\n\n"
+    entry = {
+        "timestamp": timestamp,
+        "sop_version": sop.version,
+        "stage": sop.stage,
+        "feedback": feedback,
+    }
 
     try:
         backend.append_feedback(sop_name, entry)
@@ -55,7 +55,7 @@ def handler(
         logger.warning("Failed to write feedback for %s: %s", sop_name, e)
         return {"error": f"Failed to write feedback file: {e}"}
 
-    logger.info("Feedback submitted for %s v%s at %s", sop_name, sop.version, timestamp)
+    logger.info("Feedback recorded for %s v%s at %s", sop_name, sop.version, timestamp)
     result: dict[str, Any] = {
         "success": True,
         "sop_name": sop_name,

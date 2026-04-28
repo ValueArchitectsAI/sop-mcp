@@ -127,16 +127,16 @@ class TestSopWorkflowRunThrough:
         assert "complete" in data["instruction"].lower()
 
     async def test_walkthrough_with_explicit_version(self):
-        data = await _call_tool("run_sop", {"sop_name": SOP_NAME, "version": "1.0"})
-        assert data["sop_version"] == "1.0"
+        data = await _call_tool("run_sop", {"sop_name": SOP_NAME, "version": 1})
+        assert data["sop_version"] == 1
 
         total = _get_total_steps()
         data = await _call_tool(
             "run_sop",
-            {"sop_name": SOP_NAME, "version": "1.0", "current_step": total, "step_output": "Final"},
+            {"sop_name": SOP_NAME, "version": 1, "current_step": total, "step_output": "Final"},
         )
         assert "complete" in data["instruction"].lower()
-        assert data["sop_version"] == "1.0"
+        assert data["sop_version"] == 1
 
     async def test_invalid_step_returns_error(self):
         with pytest.raises(Exception):

@@ -1,35 +1,50 @@
 """Local filesystem storage backend for SOP files.
 
-Implements the StorageBackend protocol using pathlib.Path operations
-against a configurable directory on the local filesystem.
+SOPs are stored as ``*.sop.md`` markdown files with YAML frontmatter.
+The layout is flat by default — one file per SOP directly in ``base_dir`` —
+but nesting is supported: callers may pass a relative ``path`` to
+``write_sop`` to group SOPs under subdirectories (e.g. ``generated/``,
+``teams/eng/``).
+
+Discovery is recursive: any ``*.sop.md`` under ``base_dir`` at any depth is
+picked up.  SOP identity is the frontmatter ``name`` — path is ignored for
+lookup.  When two files declare the same ``name``, the first one discovered
+wins and the duplicates are reported through ``duplicate_name_warnings`` so
+callers can surface the problem without crashing the server.
+
+Feedback for each SOP lives alongside it:
+
+    {base_dir}/{sub}/{name}.sop.md          # SOP document
+    {base_dir}/{sub}/{name}.feedback.jsonl  # append-only feedback log
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
 from pathlib import Path
 
-from .sop_parser import _parse_semver
+from .sop_parser import SOP, SOP_SUFFIX, set_version_in_content
 
 logger = logging.getLogger(__name__)
 
 # Directory containing the SOPs bundled with the package.
 BUNDLED_SOPS_DIR = Path(__file__).parent.parent / "resources"
 
+FEEDBACK_SUFFIX = ".feedback.jsonl"
+
 
 class LocalFilesystemBackend:
     """Storage backend that reads/writes SOP files on the local filesystem.
 
-    Directory layout::
-
-        {base_dir}/{sop_name}/v{version}.md
-        {base_dir}/{sop_name}/feedback.md
-
-    Attributes:
-        base_dir: The root directory for SOP storage.
-        is_ephemeral: Whether this directory is considered ephemeral.
+    Discovery is recursive — ``*.sop.md`` files at any depth under
+    ``base_dir`` are included.  SOP identity is the frontmatter ``name``
+    field; path information is ignored for lookup so two files sharing a
+    name would collide.  Collisions are reported (not raised) — first file
+    discovered wins, others are logged and exposed via
+    ``duplicate_name_warnings``.
     """
 
     def __init__(
@@ -40,11 +55,10 @@ class LocalFilesystemBackend:
     ) -> None:
         self._base_dir = base_dir
         self._is_ephemeral = is_ephemeral
+        self._duplicate_warnings: list[str] = []
 
-        # Ensure the storage directory exists (Requirement 2.4)
         self._base_dir.mkdir(parents=True, exist_ok=True)
 
-        # Seed from bundled directory if base_dir has no SOPs (Requirements 3.1-3.3)
         if seed_dir is not None:
             self._seed(seed_dir)
 
@@ -69,155 +83,227 @@ class LocalFilesystemBackend:
     def is_ephemeral(self) -> bool:
         return self._is_ephemeral
 
+    @property
+    def duplicate_name_warnings(self) -> list[str]:
+        """Warnings produced by the last ``list_sops`` scan for collisions."""
+        return list(self._duplicate_warnings)
+
+    # --- SOP discovery ---
+
+    def _scan(self) -> dict[str, Path]:
+        """Walk ``base_dir`` recursively and return ``{name: path}``.
+
+        The frontmatter ``name`` field is the key.  When two files declare
+        the same name, the lexicographically earlier path wins and the
+        collision is recorded in ``_duplicate_warnings``.
+        """
+        self._duplicate_warnings = []
+        if not self._base_dir.exists():
+            return {}
+
+        name_to_path: dict[str, Path] = {}
+        for path in sorted(self._base_dir.rglob(f"*{SOP_SUFFIX}")):
+            if not path.is_file():
+                continue
+            try:
+                content = path.read_text(encoding="utf-8")
+                sop = SOP.from_content(content)
+            except (ValueError, OSError) as exc:
+                logger.warning("Skipping unreadable SOP at %s: %s", path, exc)
+                continue
+
+            if sop.name in name_to_path:
+                existing = name_to_path[sop.name]
+                msg = (
+                    f"Duplicate SOP name '{sop.name}': "
+                    f"'{path.relative_to(self._base_dir)}' "
+                    f"collides with '{existing.relative_to(self._base_dir)}' "
+                    "— first wins, later duplicates are ignored."
+                )
+                logger.error(msg)
+                self._duplicate_warnings.append(msg)
+                continue
+
+            name_to_path[sop.name] = path
+        return name_to_path
+
+    def _sop_path(self, name: str) -> Path | None:
+        """Return the on-disk path of an SOP by name, or ``None`` if absent."""
+        return self._scan().get(name)
+
+    def _feedback_path_for(self, sop_path: Path) -> Path:
+        """Compute the feedback path next to an SOP file."""
+        name = sop_path.name[: -len(SOP_SUFFIX)]
+        return sop_path.parent / f"{name}{FEEDBACK_SUFFIX}"
+
     # --- SOP read/write ---
 
     def read_sop(self, name: str, version: str | None = None) -> str:
-        """Read SOP file content by name and optional version.
-
-        When *version* is ``None`` the latest version (highest semver) is
-        returned.  Raises ``FileNotFoundError`` when the SOP or requested
-        version does not exist.
-        """
-        sop_dir = self._base_dir / name
-        if not sop_dir.is_dir():
+        """Read SOP file content. ``version`` must match the file's version if given."""
+        path = self._sop_path(name)
+        if path is None:
             raise FileNotFoundError(f"SOP '{name}' not found")
 
+        content = path.read_text(encoding="utf-8")
         if version is not None:
-            path = sop_dir / f"v{version}.md"
-            if not path.is_file():
-                available = self.list_versions(name)
+            file_version = SOP.from_content(content).version
+            if file_version != version:
                 raise FileNotFoundError(
-                    f"Version '{version}' not found for '{name}'. Available versions: {', '.join(available)}"
+                    f"Version '{version}' not found for '{name}'. Available version: {file_version}"
                 )
-            return path.read_text(encoding="utf-8")
+        return content
 
-        # Resolve latest
-        path = self._resolve_latest(sop_dir)
-        return path.read_text(encoding="utf-8")
+    def write_sop(
+        self,
+        name: str,
+        version: str,
+        content: str,
+        path: str | None = None,
+    ) -> Path:
+        """Write SOP content and return the absolute path written to.
 
-    def write_sop(self, name: str, version: str, content: str) -> None:
-        """Write SOP content to a versioned file within the SOP's subdirectory."""
-        sop_dir = self._base_dir / name
-        sop_dir.mkdir(parents=True, exist_ok=True)
-        (sop_dir / f"v{version}.md").write_text(content, encoding="utf-8")
+        When ``path`` is given it is interpreted relative to ``base_dir`` and
+        used as the target directory (parents are created as needed).  When
+        the SOP already exists, the write updates the existing file in place
+        — ``path`` is ignored in that case to prevent accidental moves.
+
+        Raises ``ValueError`` when ``path`` resolves outside ``base_dir`` or
+        when the SOP already exists at a different path than the one given.
+        """
+        content = set_version_in_content(content, version)
+
+        existing = self._sop_path(name)
+        if existing is not None:
+            # Update in place — path parameter is informational at best.
+            if path is not None:
+                requested = self._resolve_subdir(path) / f"{name}{SOP_SUFFIX}"
+                if requested.resolve() != existing.resolve():
+                    raise ValueError(
+                        f"SOP '{name}' already exists at "
+                        f"'{existing.relative_to(self._base_dir)}'. "
+                        "Omit 'path' to update in place, or rename the SOP."
+                    )
+            existing.parent.mkdir(parents=True, exist_ok=True)
+            existing.write_text(content, encoding="utf-8")
+            return existing
+
+        target_dir = self._resolve_subdir(path) if path else self._base_dir
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / f"{name}{SOP_SUFFIX}"
+        target.write_text(content, encoding="utf-8")
+        return target
+
+    def _resolve_subdir(self, path: str) -> Path:
+        """Resolve a user-supplied subdirectory path inside ``base_dir``."""
+        candidate = (self._base_dir / path).resolve()
+        base_resolved = self._base_dir.resolve()
+        try:
+            candidate.relative_to(base_resolved)
+        except ValueError as exc:
+            raise ValueError(f"Path '{path}' resolves outside the storage directory") from exc
+        return candidate
 
     def list_sops(self) -> list[str]:
-        """Return sorted list of SOP names that have at least one versioned file."""
-        if not self._base_dir.exists():
-            return []
-        names: list[str] = []
-        for d in self._base_dir.iterdir():
-            if d.is_dir() and list(d.glob("v*.md")):
-                names.append(d.name)
-        return sorted(names)
+        """Return a sorted list of SOP names discovered recursively."""
+        return sorted(self._scan().keys())
 
     def list_versions(self, name: str) -> list[str]:
-        """Return sorted list of versions for a given SOP."""
-        sop_dir = self._base_dir / name
-        if not sop_dir.is_dir():
+        """Return the single version carried in the file, or ``[]`` if missing."""
+        path = self._sop_path(name)
+        if path is None:
             return []
-        versions = [f.stem[1:] for f in sop_dir.glob("v*.md")]
-        versions.sort(key=_parse_semver)
-        return versions
+        try:
+            sop = SOP.from_content(path.read_text(encoding="utf-8"))
+        except (ValueError, FileNotFoundError):
+            return []
+        return [sop.version]
 
     def sop_exists(self, name: str, version: str | None = None) -> bool:
-        """Check whether a specific SOP (and optionally version) exists."""
-        sop_dir = self._base_dir / name
-        if not sop_dir.is_dir():
+        path = self._sop_path(name)
+        if path is None:
             return False
         if version is None:
-            return bool(list(sop_dir.glob("v*.md")))
-        return (sop_dir / f"v{version}.md").is_file()
+            return True
+        try:
+            sop = SOP.from_content(path.read_text(encoding="utf-8"))
+        except (ValueError, FileNotFoundError):
+            return False
+        return sop.version == version
 
-    # --- Feedback ---
+    def sop_path_for(self, name: str) -> Path | None:
+        """Public helper — return the on-disk path of an SOP by name."""
+        return self._sop_path(name)
+
+    # --- Feedback (JSONL) ---
+
+    def _feedback_path(self, name: str) -> Path:
+        """Feedback path for a named SOP — defaults to base_dir when absent."""
+        sop_path = self._sop_path(name)
+        if sop_path is not None:
+            return self._feedback_path_for(sop_path)
+        return self._base_dir / f"{name}{FEEDBACK_SUFFIX}"
 
     def read_feedback(self, name: str) -> str | None:
-        """Read feedback file content for an SOP, or None if none exists."""
-        path = self._base_dir / name / "feedback.md"
+        """Return the raw JSONL feedback file content, or ``None`` if absent."""
+        path = self._feedback_path(name)
         if not path.is_file():
             return None
         return path.read_text(encoding="utf-8")
 
+    def read_feedback_entries(self, name: str) -> list[dict]:
+        """Return feedback entries parsed from the JSONL file."""
+        raw = self.read_feedback(name)
+        if not raw:
+            return []
+        entries: list[dict] = []
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entries.append(json.loads(line))
+            except json.JSONDecodeError:
+                logger.warning("Skipping malformed feedback line for %s: %s", name, line[:80])
+        return entries
+
+    def append_feedback(self, name: str, entry: dict) -> None:
+        """Append a single JSON object as a line to the feedback file."""
+        path = self._feedback_path(name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
     def write_feedback(self, name: str, content: str) -> None:
-        """Write or overwrite the feedback file for an SOP."""
-        sop_dir = self._base_dir / name
-        sop_dir.mkdir(parents=True, exist_ok=True)
-        (sop_dir / "feedback.md").write_text(content, encoding="utf-8")
+        """Overwrite the feedback file with raw JSONL content."""
+        path = self._feedback_path(name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
 
-    def append_feedback(self, name: str, entry: str) -> None:
-        """Append a feedback entry to the SOP's feedback file.
-
-        Creates the file with a header if it doesn't exist yet.
-        """
-        sop_dir = self._base_dir / name
-        sop_dir.mkdir(parents=True, exist_ok=True)
-        feedback_path = sop_dir / "feedback.md"
-
-        if feedback_path.is_file():
-            with feedback_path.open("a", encoding="utf-8") as f:
-                f.write(entry)
-        else:
-            header = (
-                f"# Feedback Log — {name}\n\n"
-                "This file collects improvement feedback for future SOP revisions.\n\n---\n\n"
-            )
-            feedback_path.write_text(header + entry, encoding="utf-8")
-
-    # --- Internal helpers ---
-
-    def _resolve_latest(self, sop_dir: Path) -> Path:
-        """Find the highest semver v*.md file in an SOP directory."""
-        versioned = list(sop_dir.glob("v*.md"))
-        if not versioned:
-            raise FileNotFoundError(f"No versioned files found in {sop_dir}")
-        versioned.sort(key=lambda f: _parse_semver(f.stem[1:]), reverse=True)
-        return versioned[0]
+    # --- Seeding ---
 
     def _has_sops(self, directory: Path) -> bool:
-        """Check whether a directory contains any SOP subdirectories with v*.md files."""
         if not directory.is_dir():
             return False
-        for d in directory.iterdir():
-            if d.is_dir() and list(d.glob("v*.md")):
-                return True
-        return False
+        return any(directory.rglob(f"*{SOP_SUFFIX}"))
 
     def _seed(self, seed_dir: Path) -> None:
-        """Copy SOP files from seed_dir into base_dir when base_dir has no SOPs.
-
-        Only versioned files (v*.md) are copied — feedback files are not.
-        Seeding is skipped when:
-        - base_dir already contains SOP subdirectories
-        - seed_dir does not exist or is empty
-        """
-        # Skip if base already has SOPs
+        """Copy SOP files from seed_dir into base_dir when base_dir has no SOPs."""
         if self._has_sops(self._base_dir):
             return
-
-        # Skip if seed dir is missing or has no SOPs (Requirement 3.2)
         if not self._has_sops(seed_dir):
             return
 
-        for src_sop_dir in seed_dir.iterdir():
-            if not src_sop_dir.is_dir():
+        for src in seed_dir.rglob(f"*{SOP_SUFFIX}"):
+            if not src.is_file():
                 continue
-            version_files = list(src_sop_dir.glob("v*.md"))
-            if not version_files:
-                continue
-            dest_sop_dir = self._base_dir / src_sop_dir.name
-            dest_sop_dir.mkdir(parents=True, exist_ok=True)
-            for vf in version_files:
-                shutil.copy2(vf, dest_sop_dir / vf.name)
-
-
-# --- Factory ---
+            rel = src.relative_to(seed_dir)
+            dest = self._base_dir / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
 
 
 def _validate_storage_path(path_str: str) -> Path:
-    """Validate that a storage directory path string is usable.
-
-    Raises ``ValueError`` for empty strings or strings containing null bytes.
-    """
+    """Validate that a storage directory path string is usable."""
     if not path_str:
         raise ValueError("Storage directory path must not be empty")
     if "\x00" in path_str:

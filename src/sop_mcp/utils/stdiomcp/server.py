@@ -183,6 +183,20 @@ class StdioMCP:
             raise ValueError(f"Unknown resource: {uri}")
         return self._resources[uri].fn()
 
+    def notify_resources_list_changed(self) -> None:
+        """Emit a ``notifications/resources/list_changed`` message to the client."""
+        notification = {
+            "jsonrpc": "2.0",
+            "method": "notifications/resources/list_changed",
+        }
+        try:
+            sys.stdout.write(json.dumps(notification) + "\n")
+            sys.stdout.flush()
+        except (BrokenPipeError, ValueError):
+            # Stdout may be closed when running outside a live transport
+            # (e.g. unit tests) — best-effort, never raise.
+            logger.debug("Could not emit resources/list_changed notification")
+
     # ------------------------------------------------------------------
     # JSON-RPC stdio transport
     # ------------------------------------------------------------------
