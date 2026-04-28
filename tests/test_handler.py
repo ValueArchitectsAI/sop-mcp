@@ -215,7 +215,7 @@ async def test_property_missing_mcp_server_prerequisites_produces_warning(
     sop_file = BUNDLED_SOPS_DIR / f"{doc_id}.sop.md"
     feedback_file = BUNDLED_SOPS_DIR / f"{doc_id}.feedback.jsonl"
     try:
-        result = await call_tool("publish_sop", {"content": content})
+        result = await call_tool("publish_sop", {"content": content, "stage": "preprod"})
         assert result.get("success") is True
         warning = result.get("warning", "")
         assert "Required MCP Servers" in warning

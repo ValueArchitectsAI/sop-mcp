@@ -54,6 +54,11 @@ def _sop_content(name: str, overview: str = "Overview text for the test SOP.") -
     )
 
 
+def _publish(content: str, *, stage: str = "preprod", **kwargs):
+    """Thin wrapper: publish_sop.handler with stage defaulted to 'preprod'."""
+    return publish_module.handler(content, stage=stage, **kwargs)
+
+
 @pytest.fixture
 def isolated_publish(tmp_path: Path, monkeypatch):
     """Wire publish_sop (and the server's resource registry) to a tmp backend.
@@ -84,7 +89,7 @@ def _resource_uris(mcp: StdioMCP) -> set[str]:
 class TestFreshPublish:
     def test_publish_writes_file_at_root(self, isolated_publish):
         backend, _ = isolated_publish
-        result = publish_module.handler(_sop_content("alpha_sop_one"))
+        result = _publish(_sop_content("alpha_sop_one"))
 
         assert result["success"] is True
         assert result["sop_name"] == "alpha_sop_one"
@@ -95,7 +100,7 @@ class TestFreshPublish:
         _, mcp = isolated_publish
         assert "sop://alpha_sop_two" not in _resource_uris(mcp)
 
-        publish_module.handler(_sop_content("alpha_sop_two"))
+        _publish(_sop_content("alpha_sop_two"))
 
         assert "sop://alpha_sop_two" in _resource_uris(mcp)
 
@@ -108,8 +113,8 @@ class TestFreshPublish:
 class TestInPlaceUpdate:
     def test_republish_same_name_bumps_version(self, isolated_publish):
         backend, _ = isolated_publish
-        r1 = publish_module.handler(_sop_content("bump_sop"))
-        r2 = publish_module.handler(_sop_content("bump_sop"))
+        r1 = _publish(_sop_content("bump_sop"))
+        r2 = _publish(_sop_content("bump_sop"))
 
         assert r1["version"] == 1
         assert r2["version"] == 2
@@ -127,7 +132,7 @@ class TestInPlaceUpdate:
 class TestNestedPath:
     def test_publish_with_path_writes_under_subdir(self, isolated_publish):
         backend, _ = isolated_publish
-        result = publish_module.handler(
+        result = _publish(
             _sop_content("nested_sop_one"),
             path="generated/",
         )
@@ -138,7 +143,7 @@ class TestNestedPath:
 
     def test_publish_with_deep_path_creates_parents(self, isolated_publish):
         backend, _ = isolated_publish
-        publish_module.handler(
+        _publish(
             _sop_content("deep_sop"),
             path="teams/platform/playbooks",
         )
@@ -153,10 +158,10 @@ class TestNestedPath:
 class TestCollisionProtection:
     def test_publish_rejects_same_name_at_different_path(self, isolated_publish):
         backend, _ = isolated_publish
-        r1 = publish_module.handler(_sop_content("collide_sop"), path="teamA/")
+        r1 = _publish(_sop_content("collide_sop"), path="teamA/")
         assert r1["success"] is True
 
-        r2 = publish_module.handler(_sop_content("collide_sop"), path="teamB/")
+        r2 = _publish(_sop_content("collide_sop"), path="teamB/")
 
         assert "error" in r2
         assert "already exists" in r2["error"]
@@ -166,10 +171,10 @@ class TestCollisionProtection:
 
     def test_republish_without_path_updates_even_when_nested(self, isolated_publish):
         backend, _ = isolated_publish
-        publish_module.handler(_sop_content("nested_update_sop"), path="generated/")
+        _publish(_sop_content("nested_update_sop"), path="generated/")
 
         # Republishing without a path should find and update the nested file.
-        r2 = publish_module.handler(_sop_content("nested_update_sop"))
+        r2 = _publish(_sop_content("nested_update_sop"))
 
         assert r2["success"] is True
         assert r2["version"] == 2
@@ -186,7 +191,7 @@ class TestCollisionProtection:
 class TestPathTraversal:
     def test_publish_rejects_parent_escape(self, isolated_publish):
         backend, _ = isolated_publish
-        result = publish_module.handler(
+        result = _publish(
             _sop_content("escape_sop"),
             path="../../../etc",
         )
@@ -204,8 +209,8 @@ class TestPathTraversal:
 class TestRecursiveDiscovery:
     def test_nested_sop_appears_in_list_sops(self, isolated_publish):
         backend, _ = isolated_publish
-        publish_module.handler(_sop_content("flat_sop"))
-        publish_module.handler(_sop_content("deeply_nested_sop"), path="a/b/c/")
+        _publish(_sop_content("flat_sop"))
+        _publish(_sop_content("deeply_nested_sop"), path="a/b/c/")
 
         names = backend.list_sops()
         assert "flat_sop" in names
@@ -213,14 +218,14 @@ class TestRecursiveDiscovery:
 
     def test_nested_sop_readable_by_name(self, isolated_publish):
         backend, _ = isolated_publish
-        publish_module.handler(_sop_content("readable_nested"), path="generated/")
+        _publish(_sop_content("readable_nested"), path="generated/")
 
         content = backend.read_sop("readable_nested")
         assert "name: readable_nested" in content
 
     def test_nested_sop_registered_under_flat_uri(self, isolated_publish):
         _, mcp = isolated_publish
-        publish_module.handler(_sop_content("uri_nested"), path="subdir/")
+        _publish(_sop_content("uri_nested"), path="subdir/")
 
         # URI is always sop://{name} — path stays organizational only.
         assert "sop://uri_nested" in _resource_uris(mcp)
@@ -258,7 +263,7 @@ class TestLiveReRegistration:
     def test_register_clears_stale_uris(self, isolated_publish):
         backend, mcp = isolated_publish
 
-        publish_module.handler(_sop_content("temp_sop"))
+        _publish(_sop_content("temp_sop"))
         assert "sop://temp_sop" in _resource_uris(mcp)
 
         # Simulate external deletion of the underlying file.
@@ -271,8 +276,8 @@ class TestLiveReRegistration:
     def test_publish_keeps_other_sops_registered(self, isolated_publish):
         _, mcp = isolated_publish
 
-        publish_module.handler(_sop_content("keep_one"))
-        publish_module.handler(_sop_content("keep_two"))
+        _publish(_sop_content("keep_one"))
+        _publish(_sop_content("keep_two"))
 
         uris = _resource_uris(mcp)
         assert {"sop://keep_one", "sop://keep_two"}.issubset(uris)

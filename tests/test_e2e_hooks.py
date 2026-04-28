@@ -202,7 +202,7 @@ class TestE2EMultipleLLMHooks:
   payload:
     title: "Second Suggestion"
     description: "Second suggestion for {sop_name}"
-    action_command: "publish_sop(change_type=\\"minor\\")"
+    action_command: "publish_sop(stage=\\"preprod\\")"
 """
         executor = _setup_executor(config)
         restore = _install_and_get_restore(executor)

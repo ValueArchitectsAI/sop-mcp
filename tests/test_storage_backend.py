@@ -163,7 +163,7 @@ def test_ephemeral_warning_iff_ephemeral_backend(
     try:
         content = _valid_content(doc_id, 1, overview)
 
-        publish_result = publish_module.handler(content)
+        publish_result = publish_module.handler(content, stage="preprod")
         assert publish_result.get("success") is True, f"publish_sop failed: {publish_result}"
 
         if is_ephemeral:

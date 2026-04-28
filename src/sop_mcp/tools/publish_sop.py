@@ -6,6 +6,7 @@ from enum import Enum
 from typing import Any
 
 from src.sop_mcp.utils import SOP, register_sop_resources, set_version_in_content
+from src.sop_mcp.utils.sop_parser import _normalise_stage, _split_frontmatter
 from src.sop_mcp.utils.storage import LocalFilesystemBackend
 
 logger = logging.getLogger(__name__)
@@ -59,16 +60,44 @@ def _bump(latest: int) -> int:
     return latest + 1
 
 
+def _overwrite_meta(content: str, *, version: int, stage: str) -> str:
+    """Overwrite the frontmatter's version and stage values before writing.
+
+    Inserts a minimal frontmatter block if the content has none — the rest of
+    the validation layer will catch missing ``name``/``owner``.
+    """
+    import yaml
+
+    meta, body = _split_frontmatter(content)
+    meta["version"] = version
+    meta["stage"] = stage
+    new_frontmatter = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True).strip()
+    return f"---\n{new_frontmatter}\n---\n{body}"
+
+
 def handler(
     content: str,
+    stage: str,
     scope: str = "personal",
     path: str | None = None,
 ) -> dict[str, Any]:
-    """Publish a new or updated SOP document."""
+    """Publish a new or updated SOP document.
+
+    ``stage`` is required and MUST be ``"preprod"`` or ``"prod"``.  Its value
+    overwrites any ``stage:`` field in the caller's frontmatter.  The
+    ``version`` is always computed server-side (1 for new SOPs, +1 for
+    updates) — whatever the caller wrote in the frontmatter is ignored.
+    """
     sc = Scope(scope) if isinstance(scope, str) else scope
+    try:
+        stage_norm = _normalise_stage(stage)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
     logger.info(
-        "Invoking publish_sop with args: content=<%s chars>, scope=%s, path=%s",
+        "Invoking publish_sop with args: content=<%s chars>, stage=%s, scope=%s, path=%s",
         len(content),
+        stage_norm,
         sc.value,
         path,
     )
@@ -86,6 +115,7 @@ def handler(
     new_version = 1 if not existing_versions else _bump(max(existing_versions))
 
     try:
+        content = _overwrite_meta(content, version=new_version, stage=stage_norm)
         content = set_version_in_content(content, new_version)
     except ValueError as e:
         return {"error": str(e)}
@@ -118,7 +148,7 @@ def handler(
         "scope": sc.value,
         "total_steps": sop.total_steps,
         "path": str(written_path.relative_to(backend.base_dir)),
-        "message": f"SOP '{sop.name}' published as v{new_version} with {sc.value} scope.",
+        "message": f"SOP '{sop.name}' published as v{new_version} ({sop.stage}) with {sc.value} scope.",
     }
     warnings = []
     if backend.is_ephemeral:

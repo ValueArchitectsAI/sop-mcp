@@ -449,7 +449,7 @@ def test_multiple_llm_hooks_same_event() -> None:
         {
             "title": "Second Suggestion",
             "description": "Second suggestion for {sop_name}",
-            "action_command": 'publish_sop(change_type="minor")',
+            "action_command": 'publish_sop(stage="preprod")',
         },
     )
 
