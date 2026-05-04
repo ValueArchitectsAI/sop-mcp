@@ -93,8 +93,9 @@ class TestFreshPublish:
 
         assert result["success"] is True
         assert result["sop_name"] == "alpha_sop_one"
-        assert (backend.base_dir / "alpha_sop_one.sop.md").is_file()
-        assert result["path"] == "alpha_sop_one.sop.md"
+        # Folder-per-SOP layout: {name}/{name}.sop.md.
+        assert (backend.base_dir / "alpha_sop_one" / "alpha_sop_one.sop.md").is_file()
+        assert result["path"] == "alpha_sop_one/alpha_sop_one.sop.md"
 
     def test_publish_registers_mcp_resource_without_restart(self, isolated_publish):
         _, mcp = isolated_publish
@@ -138,8 +139,8 @@ class TestNestedPath:
         )
 
         assert result["success"] is True
-        assert (backend.base_dir / "generated" / "nested_sop_one.sop.md").is_file()
-        assert result["path"].replace("\\", "/") == "generated/nested_sop_one.sop.md"
+        assert (backend.base_dir / "generated" / "nested_sop_one" / "nested_sop_one.sop.md").is_file()
+        assert result["path"].replace("\\", "/") == "generated/nested_sop_one/nested_sop_one.sop.md"
 
     def test_publish_with_deep_path_creates_parents(self, isolated_publish):
         backend, _ = isolated_publish
@@ -147,7 +148,7 @@ class TestNestedPath:
             _sop_content("deep_sop"),
             path="teams/platform/playbooks",
         )
-        assert (backend.base_dir / "teams" / "platform" / "playbooks" / "deep_sop.sop.md").is_file()
+        assert (backend.base_dir / "teams" / "platform" / "playbooks" / "deep_sop" / "deep_sop.sop.md").is_file()
 
 
 # ---------------------------------------------------------------------------
@@ -166,8 +167,8 @@ class TestCollisionProtection:
         assert "error" in r2
         assert "already exists" in r2["error"]
         # Original file is untouched; no new file created under teamB.
-        assert (backend.base_dir / "teamA" / "collide_sop.sop.md").is_file()
-        assert not (backend.base_dir / "teamB" / "collide_sop.sop.md").exists()
+        assert (backend.base_dir / "teamA" / "collide_sop" / "collide_sop.sop.md").is_file()
+        assert not (backend.base_dir / "teamB" / "collide_sop" / "collide_sop.sop.md").exists()
 
     def test_republish_without_path_updates_even_when_nested(self, isolated_publish):
         backend, _ = isolated_publish
@@ -179,8 +180,8 @@ class TestCollisionProtection:
         assert r2["success"] is True
         assert r2["version"] == 2
         # Still only one file; still in generated/.
-        assert (backend.base_dir / "generated" / "nested_update_sop.sop.md").is_file()
-        assert not (backend.base_dir / "nested_update_sop.sop.md").exists()
+        assert (backend.base_dir / "generated" / "nested_update_sop" / "nested_update_sop.sop.md").is_file()
+        assert not (backend.base_dir / "nested_update_sop" / "nested_update_sop.sop.md").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -267,7 +268,7 @@ class TestLiveReRegistration:
         assert "sop://temp_sop" in _resource_uris(mcp)
 
         # Simulate external deletion of the underlying file.
-        (backend.base_dir / "temp_sop.sop.md").unlink()
+        (backend.base_dir / "temp_sop" / "temp_sop.sop.md").unlink()
 
         # Re-registration should drop the now-missing URI.
         register_sop_resources(mcp, backend=backend)

@@ -23,9 +23,9 @@ NAME = "submit_sop_feedback"
 DESCRIPTION = (
     "Submit improvement feedback for a specific SOP.\n\n"
     "Feedback is appended as a single JSON line to\n"
-    "{sop_name}.feedback.jsonl alongside the SOP file. Each entry captures the\n"
-    "SOP version, a UTC timestamp, and the feedback text — ready for review\n"
-    "when the SOP is next revised."
+    "{sop_name}.feedback.jsonl sitting next to the SOP's folder. Each entry\n"
+    "captures the SOP version, a UTC timestamp, and the feedback text — ready\n"
+    "for review when the SOP is next revised."
 )
 
 

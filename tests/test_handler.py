@@ -8,6 +8,7 @@ Tests the server.py implementation including:
 from __future__ import annotations
 
 import json
+import shutil
 import string
 
 import pytest
@@ -212,7 +213,8 @@ async def test_property_missing_mcp_server_prerequisites_produces_warning(
 ) -> None:
     """Publishing SOP with tool refs but no Required MCP Servers should warn."""
     content = _build_sop_with_tool_refs_no_prereqs(doc_id, tool_name)
-    sop_file = BUNDLED_SOPS_DIR / f"{doc_id}.sop.md"
+    sop_dir = BUNDLED_SOPS_DIR / doc_id  # nested layout: {base}/{name}/{name}.sop.md
+    sop_file = BUNDLED_SOPS_DIR / f"{doc_id}.sop.md"  # flat layout fallback
     feedback_file = BUNDLED_SOPS_DIR / f"{doc_id}.feedback.jsonl"
     try:
         result = await call_tool("publish_sop", {"content": content, "stage": "preprod"})
@@ -220,9 +222,12 @@ async def test_property_missing_mcp_server_prerequisites_produces_warning(
         warning = result.get("warning", "")
         assert "Required MCP Servers" in warning
     finally:
-        for path in (sop_file, feedback_file):
-            if path.exists():
-                path.unlink()
+        if sop_dir.is_dir():
+            shutil.rmtree(sop_dir)
+        if sop_file.exists():
+            sop_file.unlink()
+        if feedback_file.exists():
+            feedback_file.unlink()
 
 
 @settings(max_examples=100, deadline=None)

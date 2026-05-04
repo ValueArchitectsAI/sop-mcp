@@ -88,10 +88,25 @@ class SOP:
 
     def __init__(self, name: str, version: int | None = None, base_dir: Path | None = None) -> None:
         self.name = name
-        self.path = (base_dir or SOPS_DIR) / f"{name}{SOP_SUFFIX}"
+        root = base_dir or SOPS_DIR
 
-        if not self.path.exists():
-            raise FileNotFoundError(f"SOP file not found: {self.path}")
+        # Prefer the folder-per-SOP layout: {root}/{name}/{name}.sop.md.
+        # Fall back to the flat {root}/{name}.sop.md for legacy storage.
+        folder_path = root / name / f"{name}{SOP_SUFFIX}"
+        flat_path = root / f"{name}{SOP_SUFFIX}"
+        if folder_path.exists():
+            self.path = folder_path
+        elif flat_path.exists():
+            self.path = flat_path
+        else:
+            # Fall back to a recursive scan in case the SOP lives in a
+            # differently-named folder or a nested location.
+            matches = [p for p in root.rglob(f"*{SOP_SUFFIX}") if p.stem.removesuffix(".sop") == name]
+            if matches:
+                self.path = sorted(matches)[0]
+            else:
+                self.path = folder_path  # reported path in the error message
+                raise FileNotFoundError(f"SOP file not found: {self.path}")
 
         content = self.path.read_text(encoding="utf-8")
         parsed = _parse_content(content)

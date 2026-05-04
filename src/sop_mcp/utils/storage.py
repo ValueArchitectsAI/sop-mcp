@@ -1,21 +1,35 @@
 """Local filesystem storage backend for SOP files.
 
-SOPs are stored as ``*.sop.md`` markdown files with YAML frontmatter.
-The layout is flat by default — one file per SOP directly in ``base_dir`` —
-but nesting is supported: callers may pass a relative ``path`` to
-``write_sop`` to group SOPs under subdirectories (e.g. ``generated/``,
-``teams/eng/``).
+SOPs are stored as ``*.sop.md`` markdown files with YAML frontmatter,
+each inside its own enclosing folder.  Feedback is a JSONL log sitting
+*next to* the SOP's folder, not inside it::
 
-Discovery is recursive: any ``*.sop.md`` under ``base_dir`` at any depth is
-picked up.  SOP identity is the frontmatter ``name`` — path is ignored for
-lookup.  When two files declare the same ``name``, the first one discovered
-wins and the duplicates are reported through ``duplicate_name_warnings`` so
-callers can surface the problem without crashing the server.
+    {base_dir}/{name}/{name}.sop.md       # SOP document
+    {base_dir}/{name}/rubric.md           # optional sibling attachments
+    {base_dir}/{name}/examples/diff.png   # …at any depth
+    {base_dir}/{name}.feedback.jsonl      # append-only feedback log
 
-Feedback for each SOP lives alongside it:
+Callers may group SOPs under a parent directory via ``path=`` on
+``write_sop``; the SOP's own folder is nested beneath that parent, and
+feedback lives as a sibling of that folder::
 
-    {base_dir}/{sub}/{name}.sop.md          # SOP document
-    {base_dir}/{sub}/{name}.feedback.jsonl  # append-only feedback log
+    {base_dir}/generated/{name}/{name}.sop.md
+    {base_dir}/generated/{name}.feedback.jsonl
+    {base_dir}/teams/eng/{name}/{name}.sop.md
+    {base_dir}/teams/eng/{name}.feedback.jsonl
+
+Feedback is treated as **write-only**: the ``submit_sop_feedback`` tool
+appends entries via ``append_feedback``, ``.feedback.jsonl`` files are
+never registered as MCP resources, and ``read_attachment`` refuses to
+serve them.  The backend exposes no read method for feedback — inspecting
+the log is an out-of-band concern (open the ``.jsonl`` directly).
+
+Discovery is recursive: any ``*.sop.md`` under ``base_dir`` at any depth
+is picked up.  SOP identity is the frontmatter ``name`` — the folder
+name is advisory (defaults to the SOP's name, but may differ).  When two
+files declare the same ``name``, the first one discovered wins and the
+duplicates are reported through ``duplicate_name_warnings`` so callers
+can surface the problem without crashing the server.
 """
 
 from __future__ import annotations
@@ -56,6 +70,12 @@ class LocalFilesystemBackend:
         self._base_dir = base_dir
         self._is_ephemeral = is_ephemeral
         self._duplicate_warnings: list[str] = []
+        # Cached {name: path} map from the last scan.  ``None`` means
+        # dirty — callers must re-scan before trusting the result.  The
+        # cache is invalidated on any write through this backend (see
+        # ``write_sop`` / ``append_feedback``).  Direct filesystem writes
+        # by a third party are not tracked.
+        self._scan_cache: dict[str, Path] | None = None
 
         self._base_dir.mkdir(parents=True, exist_ok=True)
 
@@ -96,10 +116,19 @@ class LocalFilesystemBackend:
         The frontmatter ``name`` field is the key.  When two files declare
         the same name, the lexicographically earlier path wins and the
         collision is recorded in ``_duplicate_warnings``.
+
+        Results are cached inside the backend to keep repeated lookups
+        (``list_sops``, ``read_sop``, ``list_attachments`` inside the same
+        request) O(1) instead of O(N) per call.  Any write through this
+        backend (``write_sop`` / ``append_feedback``) clears the cache.
         """
+        if self._scan_cache is not None:
+            return self._scan_cache
+
         self._duplicate_warnings = []
         if not self._base_dir.exists():
-            return {}
+            self._scan_cache = {}
+            return self._scan_cache
 
         name_to_path: dict[str, Path] = {}
         for path in sorted(self._base_dir.rglob(f"*{SOP_SUFFIX}")):
@@ -125,16 +154,38 @@ class LocalFilesystemBackend:
                 continue
 
             name_to_path[sop.name] = path
+
+        self._scan_cache = name_to_path
         return name_to_path
+
+    def _invalidate_scan(self) -> None:
+        """Clear the scan cache after a write so the next read re-scans."""
+        self._scan_cache = None
 
     def _sop_path(self, name: str) -> Path | None:
         """Return the on-disk path of an SOP by name, or ``None`` if absent."""
         return self._scan().get(name)
 
     def _feedback_path_for(self, sop_path: Path) -> Path:
-        """Compute the feedback path next to an SOP file."""
+        """Compute the feedback path for an SOP.
+
+        Feedback sits **next to** the SOP's folder, never inside it, so
+        the SOP folder stays a clean authoring surface (only content the
+        author owns) while the append-only feedback log accumulates
+        alongside it.
+
+        - Nested layout (``{…}/{name}/{name}.sop.md``) →
+          ``{…}/{name}.feedback.jsonl`` sibling of the folder.
+        - Flat layout (``{…}/{name}.sop.md``) →
+          ``{…}/{name}.feedback.jsonl`` sibling of the file.
+        """
         name = sop_path.name[: -len(SOP_SUFFIX)]
-        return sop_path.parent / f"{name}{FEEDBACK_SUFFIX}"
+        parent = sop_path.parent
+        # Nested layout: the SOP's parent folder is named after the SOP.
+        if parent.name == name:
+            return parent.parent / f"{name}{FEEDBACK_SUFFIX}"
+        # Flat layout: feedback is a sibling of the SOP file itself.
+        return parent / f"{name}{FEEDBACK_SUFFIX}"
 
     # --- SOP read/write ---
 
@@ -162,13 +213,21 @@ class LocalFilesystemBackend:
     ) -> Path:
         """Write SOP content and return the absolute path written to.
 
-        When ``path`` is given it is interpreted relative to ``base_dir`` and
-        used as the target directory (parents are created as needed).  When
-        the SOP already exists, the write updates the existing file in place
-        — ``path`` is ignored in that case to prevent accidental moves.
+        By default, an SOP is written into its own enclosing folder named
+        after the frontmatter ``name``.  For an SOP named ``onboarding``,
+        that means ``{base}/onboarding/onboarding.sop.md``.  The folder
+        becomes the home for any sibling attachments the author adds
+        (checklists, rubrics, diagrams, …).
 
-        Raises ``ValueError`` when ``path`` resolves outside ``base_dir`` or
-        when the SOP already exists at a different path than the one given.
+        ``path`` is optional and specifies a *parent* for the SOP's folder
+        — pass ``path="generated/"`` and the file lands at
+        ``{base}/generated/onboarding/onboarding.sop.md``.  When the SOP
+        already exists, the write updates the existing file in place
+        and ``path`` is treated as informational.
+
+        Raises ``ValueError`` when ``path`` resolves outside ``base_dir``
+        or when the SOP already exists at a different path than the one
+        given.
         """
         content = set_version_in_content(content, version)
 
@@ -176,7 +235,7 @@ class LocalFilesystemBackend:
         if existing is not None:
             # Update in place — path parameter is informational at best.
             if path is not None:
-                requested = self._resolve_subdir(path) / f"{name}{SOP_SUFFIX}"
+                requested = self._resolve_subdir(path) / name / f"{name}{SOP_SUFFIX}"
                 if requested.resolve() != existing.resolve():
                     raise ValueError(
                         f"SOP '{name}' already exists at "
@@ -185,12 +244,15 @@ class LocalFilesystemBackend:
                     )
             existing.parent.mkdir(parents=True, exist_ok=True)
             existing.write_text(content, encoding="utf-8")
+            self._invalidate_scan()
             return existing
 
-        target_dir = self._resolve_subdir(path) if path else self._base_dir
+        parent = self._resolve_subdir(path) if path else self._base_dir
+        target_dir = parent / name
         target_dir.mkdir(parents=True, exist_ok=True)
         target = target_dir / f"{name}{SOP_SUFFIX}"
         target.write_text(content, encoding="utf-8")
+        self._invalidate_scan()
         return target
 
     def _resolve_subdir(self, path: str) -> Path:
@@ -240,33 +302,50 @@ class LocalFilesystemBackend:
     _ATTACHMENT_BLACKLIST = {"__pycache__", ".DS_Store"}
 
     def _attachment_dir(self, name: str) -> Path | None:
-        """Return the sidecar folder for an SOP, or ``None`` if none exists.
+        """Return the folder that hosts attachments for an SOP, or ``None``.
 
-        The sidecar shares the stem of the ``.sop.md`` file.  For an SOP
-        stored at ``{base}/teams/eng/code_review.sop.md``, the sidecar is
-        ``{base}/teams/eng/code_review/``.
+        Two layouts are supported:
+
+        - **Nested** (current default) — the SOP lives at
+          ``{…}/{name}/{name}.sop.md`` and its enclosing folder doubles
+          as the attachment home.
+        - **Flat** (legacy / ad-hoc) — the SOP lives at
+          ``{…}/{name}.sop.md`` with an optional sibling folder
+          ``{…}/{name}/`` holding the attachments.
         """
         sop_path = self._sop_path(name)
         if sop_path is None:
             return None
-        candidate = sop_path.parent / name
+
+        parent = sop_path.parent
+        if parent.name == name and parent.is_dir():
+            return parent  # nested layout — SOP folder is the sidecar
+        candidate = parent / name
         return candidate if candidate.is_dir() else None
 
     def list_attachments(self, name: str) -> list[str]:
-        """Return sorted relative paths of every attachment under the sidecar.
+        """Return sorted relative paths of every attachment in the SOP folder.
 
-        Returns an empty list when the SOP has no sidecar folder.  Skips
-        hidden files (``.foo``) and entries in ``_ATTACHMENT_BLACKLIST`` so
-        cache dirs and editor metadata don't leak into ``resources/list``.
+        Excludes the SOP markdown file itself and any ``*.feedback.jsonl``
+        logs — feedback is treated as write-only from the agent's
+        perspective and MUST NOT be exposed as a readable resource.
+        Skips hidden files (``.foo``) and entries in
+        ``_ATTACHMENT_BLACKLIST`` so cache dirs and editor metadata don't
+        leak into ``resources/list``.
         """
         sidecar = self._attachment_dir(name)
         if sidecar is None:
             return []
+        sop_path = self._sop_path(name)
 
         found: list[str] = []
         for path in sorted(sidecar.rglob("*")):
             if not path.is_file():
                 continue
+            if sop_path is not None and path.resolve() == sop_path.resolve():
+                continue  # the SOP itself isn't an attachment
+            if path.name.endswith(FEEDBACK_SUFFIX):
+                continue  # feedback is write-only — never expose as a resource
             rel = path.relative_to(sidecar)
             if any(part in self._ATTACHMENT_BLACKLIST or part.startswith(".") for part in rel.parts):
                 continue
@@ -274,7 +353,14 @@ class LocalFilesystemBackend:
         return found
 
     def read_attachment(self, name: str, relative_path: str) -> bytes:
-        """Read an attachment's raw bytes by SOP name and relative path."""
+        """Read an attachment's raw bytes by SOP name and relative path.
+
+        Rejects any path that targets a ``*.feedback.jsonl`` log so
+        callers cannot bypass ``list_attachments`` by guessing the
+        filename.
+        """
+        if relative_path.endswith(FEEDBACK_SUFFIX):
+            raise FileNotFoundError(f"Attachment '{relative_path}' is not available: feedback logs are write-only.")
         sidecar = self._attachment_dir(name)
         if sidecar is None:
             raise FileNotFoundError(f"No sidecar folder for SOP '{name}'")
@@ -298,41 +384,18 @@ class LocalFilesystemBackend:
             return self._feedback_path_for(sop_path)
         return self._base_dir / f"{name}{FEEDBACK_SUFFIX}"
 
-    def read_feedback(self, name: str) -> str | None:
-        """Return the raw JSONL feedback file content, or ``None`` if absent."""
-        path = self._feedback_path(name)
-        if not path.is_file():
-            return None
-        return path.read_text(encoding="utf-8")
-
-    def read_feedback_entries(self, name: str) -> list[dict]:
-        """Return feedback entries parsed from the JSONL file."""
-        raw = self.read_feedback(name)
-        if not raw:
-            return []
-        entries: list[dict] = []
-        for line in raw.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entries.append(json.loads(line))
-            except json.JSONDecodeError:
-                logger.warning("Skipping malformed feedback line for %s: %s", name, line[:80])
-        return entries
-
     def append_feedback(self, name: str, entry: dict) -> None:
-        """Append a single JSON object as a line to the feedback file."""
+        """Append a single JSON object as a line to the feedback file.
+
+        Append-only by design — there is no matching read method on the
+        backend because feedback is write-only from the agent's
+        perspective.  Inspecting the log is an out-of-band human /
+        tooling concern (open the ``.jsonl`` file directly).
+        """
         path = self._feedback_path(name)
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-
-    def write_feedback(self, name: str, content: str) -> None:
-        """Overwrite the feedback file with raw JSONL content."""
-        path = self._feedback_path(name)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
 
     # --- Seeding ---
 

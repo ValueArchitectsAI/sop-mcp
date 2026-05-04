@@ -6,6 +6,7 @@ read_sop errors, and feedback operations.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -98,36 +99,33 @@ class TestReadSopErrors:
 
 
 class TestFeedbackOperations:
-    def test_read_feedback_returns_none_when_absent(self, tmp_path: Path) -> None:
-        backend = LocalFilesystemBackend(base_dir=tmp_path)
-
-        assert backend.read_feedback("my_sop") is None
-
-    def test_write_and_read_feedback(self, tmp_path: Path) -> None:
-        backend = LocalFilesystemBackend(base_dir=tmp_path)
-        backend.write_feedback("my_sop", "Great SOP!")
-
-        assert backend.read_feedback("my_sop") == "Great SOP!"
-
-    def test_write_feedback_overwrites(self, tmp_path: Path) -> None:
-        backend = LocalFilesystemBackend(base_dir=tmp_path)
-        backend.write_feedback("my_sop", "First")
-        backend.write_feedback("my_sop", "Second")
-
-        assert backend.read_feedback("my_sop") == "Second"
+    """Feedback is write-only — only the append path is part of the public API."""
 
     def test_append_feedback_creates_file(self, tmp_path: Path) -> None:
         backend = LocalFilesystemBackend(base_dir=tmp_path)
         backend.append_feedback("my_sop", {"feedback": "Entry 1"})
 
-        content = backend.read_feedback("my_sop")
-        assert content is not None
-        assert "Entry 1" in content
+        # The backend does not expose a read method; verify the file
+        # exists on disk and contains the appended entry.
+        feedback_file = tmp_path / "my_sop.feedback.jsonl"
+        assert feedback_file.is_file()
+        assert "Entry 1" in feedback_file.read_text(encoding="utf-8")
 
     def test_append_feedback_appends_to_existing(self, tmp_path: Path) -> None:
         backend = LocalFilesystemBackend(base_dir=tmp_path)
         backend.append_feedback("my_sop", {"feedback": "Entry 1"})
         backend.append_feedback("my_sop", {"feedback": "Entry 2"})
 
-        entries = backend.read_feedback_entries("my_sop")
-        assert [e["feedback"] for e in entries] == ["Entry 1", "Entry 2"]
+        feedback_file = tmp_path / "my_sop.feedback.jsonl"
+        lines = [line for line in feedback_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+        assert len(lines) == 2
+        parsed = [json.loads(line) for line in lines]
+        assert [e["feedback"] for e in parsed] == ["Entry 1", "Entry 2"]
+
+    def test_backend_does_not_expose_read_api(self, tmp_path: Path) -> None:
+        """Enforce the write-only contract — no accidental read helper re-appears."""
+        backend = LocalFilesystemBackend(base_dir=tmp_path)
+        for attr in ("read_feedback", "read_feedback_entries", "write_feedback"):
+            assert not hasattr(backend, attr), (
+                f"LocalFilesystemBackend must not expose '{attr}' — feedback is write-only."
+            )
