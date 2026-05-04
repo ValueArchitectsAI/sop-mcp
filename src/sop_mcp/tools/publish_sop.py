@@ -61,11 +61,7 @@ def _bump(latest: int) -> int:
 
 
 def _overwrite_meta(content: str, *, version: int, stage: str) -> str:
-    """Overwrite the frontmatter's version and stage values before writing.
-
-    Inserts a minimal frontmatter block if the content has none — the rest of
-    the validation layer will catch missing ``name``/``owner``.
-    """
+    """Overwrite the frontmatter's version and stage values before writing."""
     import yaml
 
     meta, body = _split_frontmatter(content)
@@ -75,19 +71,49 @@ def _overwrite_meta(content: str, *, version: int, stage: str) -> str:
     return f"---\n{new_frontmatter}\n---\n{body}"
 
 
+def _collect_warnings(sop: SOP) -> list[str]:
+    """Collect post-publish warnings about the SOP quality."""
+    warnings: list[str] = []
+
+    if backend.is_ephemeral:
+        warnings.append(EPHEMERAL_WARNING)
+
+    steps_missing_time = [i + 1 for i, step in enumerate(sop.steps) if "**Time Estimate:**" not in step]
+    if steps_missing_time:
+        warnings.append(
+            f"Steps {', '.join(str(s) for s in steps_missing_time)} are missing a "
+            "**Time Estimate:** field. Each step SHOULD include an estimated duration in minutes."
+        )
+
+    if not sop.mcp_server_prerequisites:
+        tool_pattern = re.compile(r"`\w+`\s+tool|call\s+the\s+`?\w+`?\s+tool", re.IGNORECASE)
+        if tool_pattern.search("\n".join(sop.steps)):
+            warnings.append(
+                "SOP steps reference MCP tools but no **Required MCP Servers** "
+                "field was found in the Prerequisites section. Each SOP SHOULD "
+                "declare required MCP servers."
+            )
+
+    return warnings
+
+
+def _refresh_resources() -> None:
+    """Re-register MCP resources after a publish."""
+    try:
+        from src.sop_mcp.server import mcp as _mcp
+
+        register_sop_resources(_mcp, backend=backend, notify=True)
+    except Exception as exc:
+        logger.warning("Failed to re-register resources after publish: %s", exc)
+
+
 def handler(
     content: str,
     stage: str,
     scope: str = "personal",
     path: str | None = None,
 ) -> dict[str, Any]:
-    """Publish a new or updated SOP document.
-
-    ``stage`` is required and MUST be ``"preprod"`` or ``"prod"``.  Its value
-    overwrites any ``stage:`` field in the caller's frontmatter.  The
-    ``version`` is always computed server-side (1 for new SOPs, +1 for
-    updates) — whatever the caller wrote in the frontmatter is ignored.
-    """
+    """Publish a new or updated SOP document."""
     sc = Scope(scope) if isinstance(scope, str) else scope
     try:
         stage_norm = _normalise_stage(stage)
@@ -127,15 +153,7 @@ def handler(
         return {"error": str(e)}
 
     sop = SOP.from_content(content)
-
-    # Surface the new SOP as an MCP resource immediately so clients see it
-    # without restarting the server.
-    try:
-        from src.sop_mcp.server import mcp as _mcp
-
-        register_sop_resources(_mcp, backend=backend, notify=True)
-    except Exception as exc:  # best-effort — never break publish on registration issues
-        logger.warning("Failed to re-register resources after publish: %s", exc)
+    _refresh_resources()
 
     logger.info("publish_sop completed successfully")
     result: dict[str, Any] = {
@@ -150,23 +168,8 @@ def handler(
         "path": str(written_path.relative_to(backend.base_dir)),
         "message": f"SOP '{sop.name}' published as v{new_version} ({sop.stage}) with {sc.value} scope.",
     }
-    warnings = []
-    if backend.is_ephemeral:
-        warnings.append(EPHEMERAL_WARNING)
-    steps_missing_time = [i + 1 for i, step in enumerate(sop.steps) if "**Time Estimate:**" not in step]
-    if steps_missing_time:
-        warnings.append(
-            f"Steps {', '.join(str(s) for s in steps_missing_time)} are missing a "
-            "**Time Estimate:** field. Each step SHOULD include an estimated duration in minutes."
-        )
-    if not sop.mcp_server_prerequisites:
-        tool_pattern = re.compile(r"`\w+`\s+tool|call\s+the\s+`?\w+`?\s+tool", re.IGNORECASE)
-        if tool_pattern.search("\n".join(sop.steps)):
-            warnings.append(
-                "SOP steps reference MCP tools but no **Required MCP Servers** "
-                "field was found in the Prerequisites section. Each SOP SHOULD "
-                "declare required MCP servers."
-            )
+
+    warnings = _collect_warnings(sop)
     if warnings:
         result["warning"] = " | ".join(warnings)
     return result

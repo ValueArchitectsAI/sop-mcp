@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-def get_storage_backend():
+def get_storage_backend() -> "LocalFilesystemBackend":
     """Create and return the local filesystem storage backend.
 
     Returns a LocalFilesystemBackend configured from environment variables.

@@ -120,7 +120,7 @@ class SOP:
         self._populate(parsed)
 
     @classmethod
-    def from_content(cls, content: str) -> "SOP":
+    def from_content(cls, content: str) -> SOP:
         """Create an SOP instance from raw markdown content (no file required)."""
         parsed = _parse_content(content)
         name = parsed["name"]

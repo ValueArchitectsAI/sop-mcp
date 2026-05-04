@@ -44,7 +44,7 @@ class TestToolDiscovery:
     async def test_no_per_sop_run_tools(self):
         tools = await mcp.list_tools()
         names = [t.name for t in tools]
-        per_sop = [n for n in names if n.startswith("run_") and n not in ("run_sop",)]
+        per_sop = [n for n in names if n.startswith("run_") and n != "run_sop"]
         assert per_sop == []
 
 

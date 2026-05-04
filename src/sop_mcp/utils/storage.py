@@ -39,6 +39,7 @@ import logging
 import os
 import shutil
 from pathlib import Path
+from typing import ClassVar
 
 from .sop_parser import SOP, SOP_SUFFIX, set_version_in_content
 
@@ -299,7 +300,7 @@ class LocalFilesystemBackend:
     # --- Sidecar attachments ---
 
     # Files/directories to never expose as attachments.
-    _ATTACHMENT_BLACKLIST = {"__pycache__", ".DS_Store"}
+    _ATTACHMENT_BLACKLIST: ClassVar[set[str]] = {"__pycache__", ".DS_Store"}
 
     def _attachment_dir(self, name: str) -> Path | None:
         """Return the folder that hosts attachments for an SOP, or ``None``.

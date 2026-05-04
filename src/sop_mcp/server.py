@@ -3,10 +3,12 @@
 Run with: ``uvx sop-mcp`` or ``uv run sop-mcp``
 """
 
+from __future__ import annotations
+
 import logging
 import os
 
-from src.sop_mcp.hook_middleware import install_hooks
+from src.sop_mcp.hooks import HookExecutor, install_hooks
 from src.sop_mcp.tools import publish_sop, run_sop, submit_sop_feedback
 from src.sop_mcp.utils import get_storage_backend, register_sop_resources
 from src.sop_mcp.utils.stdiomcp import StdioMCP
@@ -17,7 +19,7 @@ logger = logging.getLogger(__name__)
 backend = get_storage_backend()
 
 
-def _init_hooks():
+def _init_hooks() -> HookExecutor | None:
     """Bootstrap the hook system if SOP_HOOK_CONFIG is set."""
     from src.sop_mcp.hooks import (
         HookExecutor,
@@ -66,6 +68,6 @@ register_sop_resources(mcp)
 install_hooks(mcp, _init_hooks())
 
 
-def run():
+def run() -> None:
     """Entry point for uvx / uv run sop-mcp."""
     mcp.run(transport="stdio")

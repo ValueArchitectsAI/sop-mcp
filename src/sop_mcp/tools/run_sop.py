@@ -45,7 +45,7 @@ def handler(
     total = sop.total_steps
 
     if current_step < 0 or current_step > total:
-        raise ValueError(f"current_step must be 0–{total} for '{sop_name}' (v{sop.version}), got {current_step}")
+        raise ValueError(f"current_step must be 0-{total} for '{sop_name}' (v{sop.version}), got {current_step}")
 
     response: dict[str, Any] = {
         "sop_name": sop.name,

@@ -12,13 +12,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.sop_mcp.hook_middleware import install_hooks
 from src.sop_mcp.hooks import (
     HookExecutor,
     HookRegistry,
     LLMSuggestionHandler,
     ShellHandler,
     WebhookHandler,
+    install_hooks,
     parse_hook_config,
 )
 from src.sop_mcp.server import mcp

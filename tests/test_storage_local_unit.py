@@ -94,7 +94,7 @@ class TestReadSopErrors:
         backend = LocalFilesystemBackend(base_dir=tmp_path)
         backend.write_sop("my_sop", 1, _valid_sop("my_sop"))
 
-        with pytest.raises(FileNotFoundError, match="Version.*not found"):
+        with pytest.raises(FileNotFoundError, match=r"Version.*not found"):
             backend.read_sop("my_sop", 99)
 
 

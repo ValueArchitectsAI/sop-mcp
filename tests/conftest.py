@@ -15,6 +15,7 @@ It does ensure the repository is never left polluted after a pytest run.
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 
 import pytest
@@ -53,10 +54,8 @@ def _restore(root: Path, snapshot: dict[Path, bytes]) -> None:
             continue
         rel = path.relative_to(root)
         if rel not in kept:
-            try:
+            with contextlib.suppress(OSError):
                 path.unlink()
-            except OSError:
-                pass
 
     # Rewrite any file whose contents changed during the session.
     for rel, original in snapshot.items():
@@ -68,7 +67,5 @@ def _restore(root: Path, snapshot: dict[Path, bytes]) -> None:
     # Clean up any now-empty directories created by nested test writes.
     for path in sorted(root.rglob("*"), key=lambda p: len(p.parts), reverse=True):
         if path.is_dir() and not any(path.iterdir()):
-            try:
+            with contextlib.suppress(OSError):
                 path.rmdir()
-            except OSError:
-                pass
