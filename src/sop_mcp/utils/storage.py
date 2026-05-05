@@ -395,19 +395,28 @@ class LocalFilesystemBackend:
         return any(directory.rglob(f"*{SOP_SUFFIX}"))
 
     def _seed(self, seed_dir: Path) -> None:
-        """Copy SOP files from seed_dir into base_dir when base_dir has no SOPs."""
-        if self._has_sops(self._base_dir):
-            return
+        """Seed bundled SOPs into ``base_dir`` only when it's empty.
+
+        If the user's storage directory already contains any SOP, we
+        don't touch it — respecting what they've authored. When it has
+        zero SOPs (first run, wiped directory, fresh machine) we copy
+        every bundled SOP folder in full so sibling attachments like
+        ``sop_creation_guide/validate_sop.py`` travel with the SOP and
+        the ``sop://{name}/{attachment}`` resources resolve.
+        """
         if not self._has_sops(seed_dir):
             return
+        if self._has_sops(self._base_dir):
+            return
 
-        for src in seed_dir.rglob(f"*{SOP_SUFFIX}"):
-            if not src.is_file():
+        for folder in sorted(seed_dir.iterdir()):
+            if not folder.is_dir():
                 continue
-            rel = src.relative_to(seed_dir)
-            dest = self._base_dir / rel
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dest)
+            # Folder must host an SOP file to qualify as an SOP folder.
+            if not (folder / f"{folder.name}{SOP_SUFFIX}").is_file():
+                continue
+            dest = self._base_dir / folder.name
+            shutil.copytree(folder, dest, dirs_exist_ok=True)
 
 
 def _validate_storage_path(path_str: str) -> Path:
