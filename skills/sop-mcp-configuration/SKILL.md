@@ -1,7 +1,7 @@
 ---
 name: sop-mcp-configuration
 description: Configure SOP-MCP server for step-by-step SOP execution in any MCP client
-version: 1.0.0
+version: 1
 author: Value Architects
 tags: [mcp, automation, sop, configuration]
 activation: manual
@@ -67,11 +67,11 @@ Add this to your MCP client's configuration file:
 
 ## Environment Variables
 
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| `SOP_STORAGE_DIR` | Directory for SOP storage | Bundled directory (ephemeral) |
-| `SOP_HOOK_CONFIG` | Path to a `.json`, `.yaml`, or `.yml` file containing hook definitions | `null` (hooks disabled) |
-| `SOP_HOOKS_SECURE` | Enforce HTTPS webhooks and command validation | `"true"` |
+| Variable           | Purpose                                                                | Default                       |
+| ------------------ | ---------------------------------------------------------------------- | ----------------------------- |
+| `SOP_STORAGE_DIR`  | Directory for SOP storage                                              | Bundled directory (ephemeral) |
+| `SOP_HOOK_CONFIG`  | Path to a `.json`, `.yaml`, or `.yml` file containing hook definitions | `null` (hooks disabled)       |
+| `SOP_HOOKS_SECURE` | Enforce HTTPS webhooks and command validation                          | `"true"`                      |
 
 ---
 
@@ -79,13 +79,13 @@ Add this to your MCP client's configuration file:
 
 Pre-built hook configurations for common workflows:
 
-| File | Purpose |
-|------|---------|
-| [`examples/shell.hook.json`](examples/shell.hook.json) | Log SOP execution to terminal |
-| [`examples/webhook.hook.json`](examples/webhook.hook.json) | Send HTTP notifications on completion |
-| [`examples/llm.hook.json`](examples/llm.hook.json) | Surface AI suggestions during execution (JSON) |
-| [`examples/llm.hook.yaml`](examples/llm.hook.yaml) | Surface AI suggestions during execution (YAML) |
-| [`examples/mixed.hook.json`](examples/mixed.hook.json) | Combine shell + webhook + llm hooks |
+| File                                                       | Purpose                                        |
+| ---------------------------------------------------------- | ---------------------------------------------- |
+| [`examples/shell.hook.json`](examples/shell.hook.json)     | Log SOP execution to terminal                  |
+| [`examples/webhook.hook.json`](examples/webhook.hook.json) | Send HTTP notifications on completion          |
+| [`examples/llm.hook.json`](examples/llm.hook.json)         | Surface AI suggestions during execution (JSON) |
+| [`examples/llm.hook.yaml`](examples/llm.hook.yaml)         | Surface AI suggestions during execution (YAML) |
+| [`examples/mixed.hook.json`](examples/mixed.hook.json)     | Combine shell + webhook + llm hooks            |
 
 For full hook system documentation, see [`documentation/hooks.md`](docs/hooks-system.md).
 

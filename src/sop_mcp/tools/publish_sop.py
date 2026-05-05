@@ -1,12 +1,10 @@
 """Publish SOP tool."""
 
 import logging
-import re
-from enum import Enum
-from typing import Any
+from typing import Annotated, Any
 
-from src.sop_mcp.utils import SOP, ChangeType
-from src.sop_mcp.utils.sop_parser import _parse_semver, _set_version_in_content
+from src.sop_mcp.utils import SOP, register_sop_resources, set_version_in_content
+from src.sop_mcp.utils.sop_parser import _normalise_stage, _split_frontmatter
 from src.sop_mcp.utils.storage import LocalFilesystemBackend
 
 logger = logging.getLogger(__name__)
@@ -15,82 +13,145 @@ logger = logging.getLogger(__name__)
 backend = LocalFilesystemBackend.from_env()
 
 
-class Scope(Enum):
-    """Scope of an SOP document."""
-
-    PERSONAL = "personal"
-    SHARED = "shared"
-
-
-EPHEMERAL_WARNING = (
-    "⚠️ WARNING: This data was written to ephemeral storage and may be lost "
-    "when the package cache is refreshed. Set the SOP_STORAGE_DIR environment "
-    "variable to a persistent path to avoid data loss."
-)
-
 NAME = "publish_sop"
 DESCRIPTION = (
     "Publish a new or updated Standard Operating Procedure document.\n\n"
-    "The content parameter MUST contain the complete SOP markdown string. "
-    "Pass the entire document as a single string value — do not omit it or pass an empty object.\n\n"
-    'Example call: {"content": "# My SOP\\n\\n## Document Information\\n- **Document ID**: '
-    "my_sop_name\\n- **Version**: 1.0.0\\n\\n## Overview\\nDescription.\\n\\n"
-    '### Step 1: First step\\nDo the thing.", "change_type": "minor", "scope": "personal"}\n\n'
-    "The SOP name is extracted from the Document ID field in the content. "
-    "The version is auto-bumped based on change_type. "
-    "New SOPs always start at v1.0.0.\n\n"
-    "SOPs are published as personal (private) by default. Use scope='shared' for team-wide SOPs."
+    "The content parameter MUST contain the complete SOP markdown string with "
+    "YAML frontmatter declaring:\n"
+    "  - name    (required, snake_case, ≥3 underscore segments — the SOP's identity)\n"
+    "  - owner   (required, non-empty string — team, alias, or email. This is the\n"
+    "            point of contact surfaced when feedback is submitted or a mismatch\n"
+    "            is detected during review. Pick a name you want pinged.)\n"
+    "  - stage   (required, 'preprod' or 'prod' — informational lifecycle label;\n"
+    "            see the `stage` argument below for mismatch behaviour)\n"
+    "  - version (required, positive integer — advisory revision counter. The tool\n"
+    "            auto-bumps on each publish (+1), but we ask authors to declare it\n"
+    "            explicitly so a mismatch between the file on disk and what the\n"
+    "            author thinks they are updating is visible in the response)\n"
+    "  - description (optional — when omitted, the SOP's `## Overview` section is\n"
+    "            used for short summaries)\n\n"
+    "Version & stage mismatch: the tool never trusts the frontmatter values blindly. "
+    "The `stage` argument wins over the frontmatter `stage`, and the version is "
+    "computed server-side (max existing + 1). Both values are overwritten in the "
+    "stored content so the file on disk always reflects what actually happened. "
+    "If you pass a version or stage that disagrees with the final stored values, "
+    "the response surfaces the difference under `warning` so you can decide whether "
+    "you were editing the right version.\n\n"
+    'Example call: {"content": "---\\nname: my_sop_name\\nversion: 1\\n'
+    "owner: my-team\\nstage: preprod\\n---\\n\\n"
+    "# My SOP\\n\\n## Overview\\nOverview text.\\n\\n"
+    '### Step 1: First step\\nDo the thing."}\n\n'
+    "Versioning: plain positive integers — 1, 2, 3, 4, … New SOPs start at 1; "
+    "each subsequent publish increments by one. No semver."
 )
 
 
+def _bump(latest: int) -> int:
+    return latest + 1
+
+
+def _overwrite_meta(content: str, *, version: int, stage: str) -> str:
+    """Overwrite the frontmatter's version and stage values before writing."""
+    import yaml
+
+    meta, body = _split_frontmatter(content)
+    meta["version"] = version
+    meta["stage"] = stage
+    new_frontmatter = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True).strip()
+    return f"---\n{new_frontmatter}\n---\n{body}"
+
+
+def _collect_warnings(sop: SOP) -> list[str]:
+    """Collect post-publish warnings about the SOP quality."""
+    warnings: list[str] = []
+
+    steps_missing_time = [i + 1 for i, step in enumerate(sop.steps) if "**Time Estimate:**" not in step]
+    if steps_missing_time:
+        warnings.append(
+            f"Steps {', '.join(str(s) for s in steps_missing_time)} are missing a "
+            "**Time Estimate:** field. Each step SHOULD include an estimated duration in minutes."
+        )
+
+    return warnings
+
+
+def _collect_mismatch_warnings(
+    *,
+    declared_version: int | None,
+    final_version: int,
+    declared_stage: str,
+    final_stage: str,
+    owner: str,
+) -> list[str]:
+    """Surface disagreements between what the caller sent and what was stored.
+
+    Authors edit SOPs in their own tooling and can end up publishing against a
+    version they no longer hold — we want that to be loud, not silent. The
+    owner is included so the response points at the person to ping.
+    """
+    warnings: list[str] = []
+
+    if declared_version is not None and declared_version != final_version:
+        warnings.append(
+            f"Frontmatter declared version {declared_version} but this publish stored "
+            f"version {final_version} (previous max + 1). If you expected to update "
+            f"v{declared_version}, contact the owner ({owner}) — someone else may have "
+            "published in between."
+        )
+
+    if declared_stage and declared_stage != final_stage:
+        warnings.append(
+            f"Frontmatter stage was '{declared_stage}' but the `stage` argument "
+            f"('{final_stage}') took precedence. The stored file now reads '{final_stage}'."
+        )
+
+    return warnings
+
+
+def _refresh_resources() -> None:
+    """Re-register MCP resources after a publish."""
+    try:
+        from src.sop_mcp.server import mcp as _mcp
+
+        register_sop_resources(_mcp, backend=backend, notify=True)
+    except Exception as exc:
+        logger.warning("Failed to re-register resources after publish: %s", exc)
+
+
 def handler(
-    content: str,
-    change_type: str = "minor",
-    scope: str = "personal",
+    content: Annotated[str, "Complete SOP markdown with YAML frontmatter (name, owner, stage, version)"],
+    stage: Annotated[str, "Deployment stage: 'preprod' or 'prod'"],
 ) -> dict[str, Any]:
     """Publish a new or updated SOP document."""
-    ct = ChangeType(change_type) if isinstance(change_type, str) else change_type
-    sc = Scope(scope) if isinstance(scope, str) else scope
+    stage_norm = _normalise_stage(stage)
+
     logger.info(
-        "Invoking publish_sop with args: content=<%s chars>, change_type=%s, scope=%s",
+        "Invoking publish_sop with args: content=<%s chars>, stage=%s",
         len(content),
-        ct.value,
-        sc.value,
+        stage_norm,
     )
 
-    try:
-        sop = SOP.from_content(content)
-    except ValueError as e:
-        logger.warning("publish_sop error: %s", e)
-        return {"error": str(e)}
+    sop = SOP.from_content(content)
 
-    existing_versions = backend.list_versions(sop.name)
-    if not existing_versions:
-        new_version = "1.0.0"
-    else:
-        latest = max(existing_versions, key=_parse_semver)
-        parts = list(_parse_semver(latest))
-        while len(parts) < 3:
-            parts.append(0)
-        if ct is ChangeType.MAJOR:
-            parts[0] += 1
-            parts[1] = 0
-            parts[2] = 0
-        elif ct is ChangeType.MINOR:
-            parts[1] += 1
-            parts[2] = 0
-        elif ct is ChangeType.PATCH:
-            parts[2] += 1
-        new_version = ".".join(str(p) for p in parts)
+    if not sop.owner:
+        raise ValueError("Frontmatter `owner` is required and must be a non-empty string.")
 
-    content = _set_version_in_content(content, new_version)
-    try:
-        backend.write_sop(sop.name, new_version, content)
-    except OSError as e:
-        logger.warning("publish_sop error: %s", e)
-        return {"error": str(e)}
+    # Capture what the author declared before we overwrite it — these feed
+    # the mismatch warnings so the author can tell whether they were editing
+    # the file they thought they were.
+    declared_version = sop.version
+    declared_stage = sop.stage
+
+    existing_version = backend.get_version(sop.name)
+    new_version = 1 if existing_version is None else _bump(existing_version)
+
+    content = _overwrite_meta(content, version=new_version, stage=stage_norm)
+    content = set_version_in_content(content, new_version)
+
+    written_path = backend.write_sop(sop.name, new_version, content)
 
     sop = SOP.from_content(content)
+    _refresh_resources()
 
     logger.info("publish_sop completed successfully")
     result: dict[str, Any] = {
@@ -98,31 +159,20 @@ def handler(
         "sop_name": sop.name,
         "title": sop.title,
         "version": new_version,
-        "change_type": ct.value,
-        "scope": sc.value,
+        "stage": sop.stage,
+        "owner": sop.owner,
         "total_steps": sop.total_steps,
-        "message": (
-            f"SOP '{sop.name}' published as v{new_version} ({ct.value}) with {sc.value} scope. "
-            "Restart the server to register the new tool."
-        ),
+        "path": str(written_path.relative_to(backend.base_dir)),
+        "message": f"SOP '{sop.name}' published as v{new_version} ({sop.stage}).",
     }
-    warnings = []
-    if backend.is_ephemeral:
-        warnings.append(EPHEMERAL_WARNING)
-    steps_missing_time = [i + 1 for i, step in enumerate(sop.steps) if "**Time Estimate:**" not in step]
-    if steps_missing_time:
-        warnings.append(
-            f"Steps {', '.join(str(s) for s in steps_missing_time)} are missing a "
-            "**Time Estimate:** field. Each step SHOULD include an estimated duration in minutes."
-        )
-    if not sop.mcp_server_prerequisites:
-        tool_pattern = re.compile(r"`\w+`\s+tool|call\s+the\s+`?\w+`?\s+tool", re.IGNORECASE)
-        if tool_pattern.search("\n".join(sop.steps)):
-            warnings.append(
-                "SOP steps reference MCP tools but no **Required MCP Servers** "
-                "field was found in the Prerequisites section. Each SOP SHOULD "
-                "declare required MCP servers."
-            )
+
+    warnings = _collect_warnings(sop) + _collect_mismatch_warnings(
+        declared_version=declared_version,
+        final_version=new_version,
+        declared_stage=declared_stage,
+        final_stage=sop.stage,
+        owner=sop.owner,
+    )
     if warnings:
         result["warning"] = " | ".join(warnings)
     return result

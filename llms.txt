@@ -1,0 +1,38 @@
+# SOP-MCP
+
+An MCP server that guides AI agents through Standard Operating Procedures (SOPs) one step at a time.
+
+## Tools
+
+- **publish_sop**: Publish a new or updated Standard Operating Procedure document.
+- **run_sop**: Start or advance a Standard Operating Procedure step by step. Use list_resources to discover available SOPs, then call this tool with the SOP name.
+- **submit_sop_feedback**: Submit improvement feedback for a specific SOP.
+
+## Resources
+
+- `sop://code_review_process`: This SOP defines the standard process for conducting code reviews to ensure code quality, consistency, and knowledge sharing across the team.
+- `sop://employee_onboarding_setup`: This SOP defines the steps for onboarding a new employee, covering the initial setup tasks: obtaining the employee's name from the HR partner, registering an alias in IT systems, sending the new empl…
+- `sop://sop_creation_guide`: Step-by-step guide for creating SOPs using RFC 2119 requirement levels. SOPs are delivered one step at a time to LLMs via MCP tool calls — each step MUST be self-contained and describe what concrete…
+- `sop://user_onboarding_process`: This SOP defines the standard process for onboarding new users to the organization's systems and tools, ensuring consistent access provisioning and a smooth first-day experience.
+
+## Usage
+
+1. Call `list_resources` to discover available SOPs
+2. Call `run_sop(sop_name="...")` to start executing an SOP
+3. Execute each step, then call `run_sop(current_step=N, step_output="...")` to advance
+4. Use `publish_sop` to create new SOPs
+5. Use `submit_sop_feedback` to record improvement suggestions
+
+## Configuration
+
+```json
+{
+  "mcpServers": {
+    "sop-mcp": {
+      "command": "uvx",
+      "args": ["sop-mcp"],
+      "env": { "SOP_STORAGE_DIR": "/path/to/sops" }
+    }
+  }
+}
+```

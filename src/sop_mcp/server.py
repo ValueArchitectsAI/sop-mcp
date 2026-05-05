@@ -3,22 +3,24 @@
 Run with: ``uvx sop-mcp`` or ``uv run sop-mcp``
 """
 
+from __future__ import annotations
+
 import logging
 import os
 
-from src.sop_mcp.hook_middleware import install_hooks
-from src.sop_mcp.resources.sop_content import register_sop_resources
+from src.sop_mcp.hooks import HookExecutor, install_hooks
 from src.sop_mcp.tools import publish_sop, run_sop, submit_sop_feedback
-from src.sop_mcp.utils import get_storage_backend
+from src.sop_mcp.utils import register_sop_resources
 from src.sop_mcp.utils.stdiomcp import StdioMCP
+from src.sop_mcp.utils.storage import LocalFilesystemBackend
 
 logger = logging.getLogger(__name__)
 
 # Initialize storage backend at module level
-backend = get_storage_backend()
+backend = LocalFilesystemBackend.from_env()
 
 
-def _init_hooks():
+def _init_hooks() -> HookExecutor | None:
     """Bootstrap the hook system if SOP_HOOK_CONFIG is set."""
     from src.sop_mcp.hooks import (
         HookExecutor,
@@ -54,7 +56,15 @@ def _init_hooks():
 
 
 # Initialize MCP server
-mcp = StdioMCP("SOP MCP Server")
+mcp = StdioMCP(
+    "SOP MCP Server",
+    instructions=(
+        "This server guides you through Standard Operating Procedures (SOPs) one step at a time. "
+        "Use list_resources to discover available SOPs, then run_sop to execute them step by step. "
+        "You MUST execute each step's actions before advancing — do not skip or summarize. "
+        "Use publish_sop to create new SOPs and submit_sop_feedback to record improvement suggestions."
+    ),
+)
 
 # Register tools
 for _mod in (run_sop, publish_sop, submit_sop_feedback):
@@ -67,6 +77,6 @@ register_sop_resources(mcp)
 install_hooks(mcp, _init_hooks())
 
 
-def run():
+def run() -> None:
     """Entry point for uvx / uv run sop-mcp."""
     mcp.run(transport="stdio")

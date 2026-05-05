@@ -11,7 +11,8 @@ import inspect
 import json
 import logging
 import sys
-from typing import Any, Callable, get_type_hints
+from collections.abc import Callable
+from typing import Any, get_type_hints
 
 logger = logging.getLogger(__name__)
 
@@ -30,13 +31,25 @@ _TYPE_MAP: dict[type, str] = {
 def _build_input_schema(fn: Callable) -> dict[str, Any]:
     """Build a JSON Schema ``inputSchema`` from a function's signature."""
     sig = inspect.signature(fn)
-    hints = get_type_hints(fn)
+    hints = get_type_hints(fn, include_extras=True)
     properties: dict[str, Any] = {}
     required: list[str] = []
 
     for name, param in sig.parameters.items():
         hint = hints.get(name, str)
-        # Unwrap Optional / X | None
+        description: str | None = None
+
+        # Extract metadata from Annotated types.
+        if hasattr(hint, "__metadata__"):
+            for meta in hint.__metadata__:
+                if isinstance(meta, str):
+                    description = meta
+                elif hasattr(meta, "description") and meta.description:
+                    description = meta.description
+            # Unwrap Annotated to get the base type.
+            hint = hint.__args__[0] if hasattr(hint, "__args__") else hint
+
+        # Handle Optional (Union with None) / UnionType (3.10+).
         origin = getattr(hint, "__origin__", None)
         args = getattr(hint, "__args__", ())
         is_optional = False
@@ -48,15 +61,8 @@ def _build_input_schema(fn: Callable) -> dict[str, Any]:
 
         json_type = _TYPE_MAP.get(hint, "string")
         prop: dict[str, Any] = {"type": json_type}
-
-        # Extract description from Annotated metadata or Field
-        ann = hints.get(name)
-        if hasattr(ann, "__metadata__"):
-            for meta in ann.__metadata__:
-                if isinstance(meta, str):
-                    prop["description"] = meta
-                elif hasattr(meta, "description") and meta.description:
-                    prop["description"] = meta.description
+        if description:
+            prop["description"] = description
 
         properties[name] = prop
         if param.default is inspect.Parameter.empty and not is_optional:
@@ -71,7 +77,7 @@ def _build_input_schema(fn: Callable) -> dict[str, Any]:
 class _ToolInfo:
     """Internal tool registration."""
 
-    __slots__ = ("name", "description", "fn", "input_schema")
+    __slots__ = ("description", "fn", "input_schema", "name")
 
     def __init__(self, name: str, description: str, fn: Callable, input_schema: dict[str, Any]) -> None:
         self.name = name
@@ -83,27 +89,36 @@ class _ToolInfo:
 class _ResourceInfo:
     """Internal resource registration."""
 
-    __slots__ = ("uri", "name", "description", "mime_type", "fn")
+    __slots__ = ("description", "fn", "is_binary", "mime_type", "name", "uri")
 
-    def __init__(self, uri: str, name: str, description: str, mime_type: str, fn: Callable) -> None:
+    def __init__(
+        self,
+        uri: str,
+        name: str,
+        description: str,
+        mime_type: str,
+        fn: Callable,
+        is_binary: bool = False,
+    ) -> None:
         self.uri = uri
         self.name = name
         self.description = description
         self.mime_type = mime_type
         self.fn = fn
+        self.is_binary = is_binary
 
 
 class StdioMCP:
-    """Lightweight MCP server — stdio only, zero C-dependencies.
+    """Lightweight MCP server — stdio only, zero C-dependencies."""
 
-    Supports tool and resource registration via decorators, and runs
-    a JSON-RPC 2.0 event loop over stdio.
-    """
-
-    def __init__(self, name: str = "MCP Server", resources_as_tools: bool = True, **kwargs: Any) -> None:
+    def __init__(
+        self, name: str = "MCP Server", resources_as_tools: bool = True, instructions: str = "", **kwargs: Any
+    ) -> None:
         self.name = name
+        self.instructions = instructions
         self._tools: dict[str, _ToolInfo] = {}
         self._resources: dict[str, _ResourceInfo] = {}
+        self._subscriptions: set[str] = set()
         self._resources_as_tools = resources_as_tools
         self._resource_tools_registered = False
 
@@ -116,7 +131,6 @@ class StdioMCP:
 
         def decorator(fn: Callable) -> Callable:
             tool_name = name or fn.__name__
-            # Prefer explicit description, then @tool() meta, then docstring
             desc = description
             if desc is None and hasattr(fn, "_tool_meta"):
                 desc = fn._tool_meta.get("description")
@@ -134,11 +148,12 @@ class StdioMCP:
         name: str = "",
         description: str = "",
         mime_type: str = "text/plain",
+        is_binary: bool = False,
     ) -> Callable:
         """Register a function as an MCP resource (decorator factory)."""
 
         def decorator(fn: Callable) -> Callable:
-            self._resources[uri] = _ResourceInfo(uri, name, description, mime_type, fn)
+            self._resources[uri] = _ResourceInfo(uri, name, description, mime_type, fn, is_binary)
             return fn
 
         return decorator
@@ -154,7 +169,6 @@ class StdioMCP:
             raise ValueError(f"Unknown tool: {name}")
         tool = self._tools[name]
         args = arguments or {}
-        # Coerce types from JSON (everything arrives as string over wire)
         result = tool.fn(**args)
         return json.dumps(result)
 
@@ -182,6 +196,30 @@ class StdioMCP:
         if uri not in self._resources:
             raise ValueError(f"Unknown resource: {uri}")
         return self._resources[uri].fn()
+
+    def notify_resources_list_changed(self) -> None:
+        """Emit a ``notifications/resources/list_changed`` message to the client."""
+        self._emit_notification({"jsonrpc": "2.0", "method": "notifications/resources/list_changed"})
+
+    def notify_resource_updated(self, uri: str) -> None:
+        """Emit ``notifications/resources/updated`` for a subscribed URI only."""
+        if uri not in self._subscriptions:
+            return
+        self._emit_notification(
+            {
+                "jsonrpc": "2.0",
+                "method": "notifications/resources/updated",
+                "params": {"uri": uri},
+            }
+        )
+
+    def _emit_notification(self, notification: dict[str, Any]) -> None:
+        """Write a notification to stdout (best-effort)."""
+        try:
+            sys.stdout.write(json.dumps(notification) + "\n")
+            sys.stdout.flush()
+        except (BrokenPipeError, ValueError):
+            logger.debug("Could not emit notification")
 
     # ------------------------------------------------------------------
     # JSON-RPC stdio transport
@@ -217,91 +255,116 @@ class StdioMCP:
             method = request.get("method", "")
             params = request.get("params", {})
 
-            # Notifications (no id) — just acknowledge
             if req_id is None:
                 continue
 
-            response = self._handle_request(method, params, req_id)
+            response = self._dispatch(method, params, req_id)
             if response is not None:
                 self._write(response)
 
-    def _handle_request(self, method: str, params: dict[str, Any], req_id: Any) -> dict[str, Any] | None:
-        """Dispatch a JSON-RPC method."""
-        if method == "initialize":
-            return self._rpc_result(
-                req_id,
-                {
-                    "protocolVersion": PROTOCOL_VERSION,
-                    "capabilities": {
-                        "tools": {"listChanged": False},
-                        "resources": {"subscribe": False, "listChanged": False},
-                    },
-                    "serverInfo": {"name": self.name, "version": "1.0.0"},
-                },
-            )
+    # ------------------------------------------------------------------
+    # Method dispatch
+    # ------------------------------------------------------------------
 
-        if method == "ping":
-            return self._rpc_result(req_id, {})
+    def _dispatch(self, method: str, params: dict[str, Any], req_id: Any) -> dict[str, Any] | None:
+        """Dispatch a JSON-RPC method to the appropriate handler."""
+        dispatch_table: dict[str, Callable] = {
+            "initialize": self._handle_initialize,
+            "ping": self._handle_ping,
+            "tools/list": self._handle_tools_list,
+            "tools/call": self._handle_tool_call,
+            "resources/list": self._handle_resources_list,
+            "resources/read": self._handle_resource_read,
+            "resources/subscribe": self._handle_subscribe,
+            "resources/unsubscribe": self._handle_unsubscribe,
+        }
+        handler = dispatch_table.get(method)
+        if handler is None:
+            return self._rpc_error(req_id, -32601, f"Method not found: {method}")
+        return handler(params, req_id)
 
-        if method == "tools/list":
-            tools = [
-                {
-                    "name": t.name,
-                    "description": t.description,
-                    "inputSchema": t.input_schema,
-                }
-                for t in self._tools.values()
-            ]
-            return self._rpc_result(req_id, {"tools": tools})
+    # Keep backward-compat alias for tests that call _handle_request directly
+    _handle_request = _dispatch
 
-        if method == "tools/call":
-            return self._handle_tool_call(params, req_id)
+    def _handle_initialize(self, params: dict[str, Any], req_id: Any) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            "protocolVersion": PROTOCOL_VERSION,
+            "capabilities": {
+                "tools": {"listChanged": False},
+                "resources": {"subscribe": True, "listChanged": True},
+            },
+            "serverInfo": {"name": self.name, "version": "1.0.0"},
+        }
+        if self.instructions:
+            result["instructions"] = self.instructions
+        return self._rpc_result(req_id, result)
 
-        if method == "resources/list":
-            resources = [
-                {
-                    "uri": r.uri,
-                    "name": r.name,
-                    "description": r.description,
-                    "mimeType": r.mime_type,
-                }
-                for r in self._resources.values()
-            ]
-            return self._rpc_result(req_id, {"resources": resources})
+    def _handle_ping(self, params: dict[str, Any], req_id: Any) -> dict[str, Any]:
+        return self._rpc_result(req_id, {})
 
-        if method == "resources/read":
-            return self._handle_resource_read(params, req_id)
-
-        return self._rpc_error(req_id, -32601, f"Method not found: {method}")
+    def _handle_tools_list(self, params: dict[str, Any], req_id: Any) -> dict[str, Any]:
+        tools = [
+            {"name": t.name, "description": t.description, "inputSchema": t.input_schema} for t in self._tools.values()
+        ]
+        return self._rpc_result(req_id, {"tools": tools})
 
     def _handle_tool_call(self, params: dict[str, Any], req_id: Any) -> dict[str, Any]:
-        """Handle tools/call."""
         name = params.get("name", "")
         arguments = params.get("arguments", {})
 
         if name not in self._tools:
             return self._rpc_error(req_id, -32602, f"Unknown tool: {name}")
 
+        import asyncio
+
         try:
-            result = self._tools[name].fn(**arguments)
-            content = [{"type": "text", "text": json.dumps(result)}]
+            result = asyncio.run(self.call_tool(name, arguments))
+            content = [{"type": "text", "text": result}]
             return self._rpc_result(req_id, {"content": content})
         except Exception as e:
             content = [{"type": "text", "text": json.dumps({"error": str(e)})}]
             return self._rpc_result(req_id, {"content": content, "isError": True})
 
+    def _handle_resources_list(self, params: dict[str, Any], req_id: Any) -> dict[str, Any]:
+        resources = [
+            {"uri": r.uri, "name": r.name, "description": r.description, "mimeType": r.mime_type}
+            for r in self._resources.values()
+        ]
+        return self._rpc_result(req_id, {"resources": resources})
+
     def _handle_resource_read(self, params: dict[str, Any], req_id: Any) -> dict[str, Any]:
-        """Handle resources/read."""
         uri = params.get("uri", "")
         if uri not in self._resources:
             return self._rpc_error(req_id, -32602, f"Unknown resource: {uri}")
 
+        resource = self._resources[uri]
         try:
-            text = self._resources[uri].fn()
-            contents = [{"uri": uri, "mimeType": self._resources[uri].mime_type, "text": text}]
-            return self._rpc_result(req_id, {"contents": contents})
+            payload = resource.fn()
         except Exception as e:
             return self._rpc_error(req_id, -32603, str(e))
+
+        content: dict[str, Any] = {"uri": uri, "mimeType": resource.mime_type}
+        if resource.is_binary:
+            import base64
+
+            if isinstance(payload, str):
+                payload = payload.encode("utf-8")
+            content["blob"] = base64.b64encode(payload).decode("ascii")
+        else:
+            content["text"] = payload
+        return self._rpc_result(req_id, {"contents": [content]})
+
+    def _handle_subscribe(self, params: dict[str, Any], req_id: Any) -> dict[str, Any]:
+        uri = params.get("uri", "")
+        if not uri:
+            return self._rpc_error(req_id, -32602, "Missing 'uri' parameter")
+        self._subscriptions.add(uri)
+        return self._rpc_result(req_id, {})
+
+    def _handle_unsubscribe(self, params: dict[str, Any], req_id: Any) -> dict[str, Any]:
+        uri = params.get("uri", "")
+        self._subscriptions.discard(uri)
+        return self._rpc_result(req_id, {})
 
     # ------------------------------------------------------------------
     # JSON-RPC helpers

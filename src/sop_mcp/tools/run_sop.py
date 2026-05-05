@@ -1,7 +1,9 @@
 """Start or advance a Standard Operating Procedure."""
 
+from __future__ import annotations
+
 import logging
-from typing import Any
+from typing import Annotated, Any
 
 from src.sop_mcp.utils import SOP
 from src.sop_mcp.utils.storage import LocalFilesystemBackend
@@ -22,15 +24,21 @@ DESCRIPTION = (
     "output you produced for the completed step."
 )
 
+# Hard cap on step_output size. 50 KB fits any reasonable step summary or
+# artifact reference; anything larger is almost certainly accidental log
+# dumping or a malicious payload trying to bloat server-side state.
+MAX_STEP_OUTPUT_BYTES = 50 * 1024
+
 
 def handler(
-    sop_name: str,
-    current_step: int = 0,
-    version: str | None = None,
-    step_output: str | None = None,
+    sop_name: Annotated[str, "Name of the SOP to execute (use list_resources to discover available SOPs)"],
+    current_step: Annotated[int, "Step number to advance from. 0 to start, N to advance past step N"] = 0,
+    step_output: Annotated[
+        str | None, "Concrete output you produced for the completed step. Required when current_step >= 1"
+    ] = None,
 ) -> dict[str, Any]:
     """Start or advance an SOP — returns the next step."""
-    logger.info("Invoking run_sop: sop_name=%s, current_step=%s, version=%s", sop_name, current_step, version)
+    logger.info("Invoking run_sop: sop_name=%s, current_step=%s", sop_name, current_step)
 
     if not backend.sop_exists(sop_name):
         raise ValueError(f"SOP '{sop_name}' not found. Available: {', '.join(backend.list_sops())}")
@@ -41,11 +49,18 @@ def handler(
             "Provide the concrete output you produced for the completed step."
         )
 
-    sop = SOP(sop_name, version=version, base_dir=backend.base_dir)
+    if step_output is not None and len(step_output.encode("utf-8")) > MAX_STEP_OUTPUT_BYTES:
+        raise ValueError(
+            f"step_output exceeds {MAX_STEP_OUTPUT_BYTES} bytes "
+            f"({len(step_output.encode('utf-8'))} received). "
+            "Summarise the step output instead of including full logs or artifacts."
+        )
+
+    sop = SOP(sop_name, base_dir=backend.base_dir)
     total = sop.total_steps
 
     if current_step < 0 or current_step > total:
-        raise ValueError(f"current_step must be 0–{total} for '{sop_name}' (v{sop.version}), got {current_step}")
+        raise ValueError(f"current_step must be 0-{total} for '{sop_name}' (v{sop.version}), got {current_step}")
 
     response: dict[str, Any] = {
         "sop_name": sop.name,

@@ -1,18 +1,17 @@
+---
+name: sop_creation_guide
+description: Step-by-step guide for creating SOPs using RFC 2119 requirement levels.
+  SOPs are delivered one step at a time to LLMs via MCP tool calls — each step MUST
+  be self-contained and describe what concrete…
+version: 1
+owner: value-architects
+stage: preprod
+---
 
 # Standard Operating Procedure: Creating Standard Operating Procedures
 
-## Document Information
-- **Document ID**: sop_creation_guide
-- **Version**: 1.4
-
 ## Overview
 Step-by-step guide for creating SOPs using RFC 2119 requirement levels. SOPs are delivered one step at a time to LLMs via MCP tool calls — each step MUST be self-contained and describe what concrete output is expected.
-
-## Prerequisites
-- Understanding of the business process to document
-- Access to subject matter experts
-
----
 
 ## Steps
 
@@ -43,17 +42,16 @@ Step-by-step guide for creating SOPs using RFC 2119 requirement levels. SOPs are
 
 **Actions**:
 1. Create the document header:
-   - `# title`, `## Document Information` (Document ID, Version), `## Overview`, `## Prerequisites`
+   - `# title`, `## Document Information` (Document ID, Version), `## Overview`, 
 2. Break the process into sequential steps using `### Step N: Title`
 3. For each step include: Objective, Actions, Requirements (using RFC 2119), Expected Output, Time Estimate
-4. If steps reference MCP tools, add `**Required MCP Servers**` in Prerequisites
-5. Add a final feedback step using `submit_sop_feedback`
+4. Add a final feedback step using `submit_sop_feedback`
 
 **Requirements**:
 - You MUST use `### Step N:` heading syntax for each step
 - You MUST use RFC 2119 keywords correctly:
   - **MUST**: absolute requirements (safety, legal, essential for success)
-  - **SHOULD**: best practices with valid alternatives
+  - **SHOULD**: recommended practice with valid alternatives
   - **MAY**: truly optional enhancements
 - You MUST write each step as self-contained — the executor sees only one step at a time
 - You MUST describe concrete expected output for each step
@@ -68,6 +66,8 @@ Step-by-step guide for creating SOPs using RFC 2119 requirement levels. SOPs are
 - Specify formats when relevant (dates as YYYY-MM-DD, status as VALID/EXPIRED/PENDING)
 - Allow flexibility — guide the output without being overly prescriptive
 
+**Expected Output**: A complete SOP markdown document with frontmatter, Overview, and sequential steps — each step containing Objective, Actions, Requirements (RFC 2119), Expected Output, and Time Estimate.
+
 **Time Estimate**: 1-3 hours
 
 ---
@@ -77,18 +77,23 @@ Step-by-step guide for creating SOPs using RFC 2119 requirement levels. SOPs are
 **Objective**: Verify the SOP is accurate, complete, and usable.
 
 **Actions**:
-1. Read each step in isolation — does it make sense without context from other steps?
-2. Verify RFC 2119 keywords are used correctly (MUST = truly mandatory?)
-3. Check that every step has an Expected Output section
-4. Have a subject matter expert review for technical accuracy
-5. Have an end user review for clarity
-6. Conduct a test run using only the SOP as guidance
+1. Read the validation script from `sop://sop_creation_guide/validate_sop.py` using `read_resource`
+2. Run `validate_sop(your_sop_content)` against your draft — fix all errors, review warnings
+3. Read each step in isolation — does it make sense without context from other steps?
+4. Verify RFC 2119 keywords are used correctly (MUST = truly mandatory?)
+5. Check that every step has an Expected Output section
+6. Have a subject matter expert review for technical accuracy
+7. Have an end user review for clarity
+8. Conduct a test run using only the SOP as guidance
 
 **Requirements**:
+- You MUST read `sop://sop_creation_guide/validate_sop.py` and run it against your draft
+- You MUST resolve all errors reported by the validator before publishing
 - You MUST have at least one SME review for accuracy
 - You MUST have at least one end user review for clarity
 - You MUST verify all MUST requirements are truly mandatory
 - You SHOULD read each step in isolation to verify it's self-contained
+- You SHOULD resolve warnings from the validator (missing Expected Output, Time Estimate)
 - You SHOULD conduct a test run of the full process
 
 **Review checklist**:
@@ -97,6 +102,8 @@ Step-by-step guide for creating SOPs using RFC 2119 requirement levels. SOPs are
 - [ ] RFC 2119 keywords are correct and capitalized
 - [ ] Markdown renders correctly
 - [ ] No missing steps or decision points
+
+**Expected Output**: Validation passing with zero errors, all warnings addressed, and confirmation from at least one SME and one end user that the SOP is accurate and clear.
 
 **Time Estimate**: 1-2 hours
 
@@ -116,6 +123,8 @@ Step-by-step guide for creating SOPs using RFC 2119 requirement levels. SOPs are
 - You MUST incorporate critical review feedback before publishing
 - You SHOULD set a review date (quarterly for new processes, annually for stable ones)
 
+**Expected Output**: SOP published via `publish_sop` tool with confirmation of success, version number, and stakeholders notified.
+
 **Time Estimate**: 15-30 minutes
 
 ---
@@ -133,22 +142,6 @@ Step-by-step guide for creating SOPs using RFC 2119 requirement levels. SOPs are
 - You SHOULD call `submit_sop_feedback` with specific observations
 - You SHOULD include both what worked well and what needs improvement
 
+**Expected Output**: Feedback submitted via `submit_sop_feedback` tool with specific observations on what worked and what needs improvement.
+
 **Time Estimate**: 5-10 minutes
-
----
-
-## References
-- RFC 2119: https://datatracker.ietf.org/doc/html/rfc2119
-- Markdown Guide: https://www.markdownguide.org/
-
----
-
-## Revision History
-
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0 | Feb 7, 2026 | Initial release |
-| 1.1 | Feb 14, 2026 | Added Required MCP Servers guidance |
-| 1.2 | Feb 16, 2026 | Added Expected Output requirements, self-contained step guidance |
-| 1.3 | Feb 18, 2026 | Added feedback step, softened output guidance |
-| 1.4 | Apr 14, 2026 | Major trim: removed redundant sections (Scope, Definitions, Parameters, Quality Standards, RFC reference), consolidated 8 steps to 5, reduced from ~400 to ~150 lines |

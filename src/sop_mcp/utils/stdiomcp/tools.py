@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 
 def tool(description: str | None = None) -> Callable:

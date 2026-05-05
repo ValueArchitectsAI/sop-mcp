@@ -10,10 +10,9 @@ Tests cover:
 import string
 
 import pytest
-from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from src.sop_mcp.utils.sop_parser import SOP, _extract_mcp_server_prerequisites, list_available_sops
+from src.sop_mcp.utils.sop_parser import SOP, list_available_sops
 
 
 class TestSopTitleExtraction:
@@ -97,9 +96,13 @@ class TestSopFromContent:
 
     def test_parses_valid_content(self):
         content = (
+            "---\n"
+            "name: my_test_sop\n"
+            "version: 1\n"
+            "owner: tests\n"
+            "stage: preprod\n"
+            "---\n\n"
             "# Test SOP\n\n"
-            "## Document Information\n"
-            "- **Document ID**: my_test_sop\n\n"
             "## Overview\n\nThis is a test SOP.\n\n"
             "### Step 1: Do something\n\nDo the thing.\n"
         )
@@ -115,7 +118,17 @@ class TestSopFromContent:
             SOP.from_content(content)
 
     def test_raises_for_missing_title(self):
-        content = "no heading\n\n- **Document ID**: bad_test_sop\n\n## Overview\n\nHello\n\n### Step 1: Do\n\nStuff\n"
+        content = (
+            "---\n"
+            "name: bad_test_sop\n"
+            "version: 1\n"
+            "owner: tests\n"
+            "stage: preprod\n"
+            "---\n\n"
+            "no heading\n\n"
+            "## Overview\n\nHello\n\n"
+            "### Step 1: Do\n\nStuff\n"
+        )
         with pytest.raises(ValueError, match="missing a title"):
             SOP.from_content(content)
 
@@ -192,7 +205,6 @@ def _build_sop_with_servers(entries: list[tuple[str, str]], marker: str) -> str:
         "## Document Information\n"
         "- **Document ID**: some_test_sop\n\n"
         "## Overview\n\nThis is a test SOP overview.\n\n"
-        "## Prerequisites\n\n"
         "- Some general prerequisite\n\n"
         f"**Required MCP Servers**{marker}:\n"
         f"{items}\n\n"
@@ -207,42 +219,6 @@ def _build_sop_without_servers() -> str:
         "## Document Information\n"
         "- **Document ID**: some_test_sop\n\n"
         "## Overview\n\nThis is a test SOP overview.\n\n"
-        "## Prerequisites\n\n"
         "- Some general prerequisite\n\n"
         "### Step 1: Do something\n\nDo the thing.\n"
     )
-
-
-# Feature: sop-prerequisites-mcp-servers, Property 1: MCP Server Prerequisites Parsing Round Trip
-# Validates: Requirements 1.1, 1.2, 1.3, 1.4, 6.1, 6.2, 6.3
-@settings(max_examples=100, deadline=None)
-@given(
-    entries=st.lists(server_entry, min_size=0, max_size=10),
-    marker=should_marker,
-    include_field=st.booleans(),
-)
-def test_property_mcp_server_prerequisites_round_trip(
-    entries: list[tuple[str, str]],
-    marker: str,
-    include_field: bool,
-) -> None:
-    """For any list of valid MCP server names (some with descriptions),
-    embedding them in a well-formed SOP markdown under a **Required MCP Servers**
-    field and parsing with _extract_mcp_server_prerequisites yields exactly
-    those server names, in the same order, with descriptions stripped.
-
-    Edge cases covered:
-    - Empty list of entries (entries=[])
-    - No field present (include_field=False)
-    - (should) marker present or absent (marker varies)
-    """
-    if include_field:
-        content = _build_sop_with_servers(entries, marker)
-        expected_names = [name for name, _ in entries]
-        result = _extract_mcp_server_prerequisites(content)
-        assert result == expected_names
-    else:
-        # No **Required MCP Servers** field → empty list
-        content = _build_sop_without_servers()
-        result = _extract_mcp_server_prerequisites(content)
-        assert result == []

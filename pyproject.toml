@@ -32,7 +32,10 @@ Issues = "https://github.com/ValueArchitectsAI/sop-mcp/issues"
 
 [dependency-groups]
 dev = [
+    "fastmcp>=2.0.0",
     "hypothesis>=6.0.0,<6.153.0",
+    "mcp>=1.0.0",
+    "pre-commit>=3.0.0",
     "pytest>=8.0.0",
     "pytest-asyncio>=1.0.0",
     "pyyaml>=6.0.3",
@@ -63,26 +66,74 @@ packages = ["src"]
 target-version = "py310"
 line-length = 120
 
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
 [tool.ruff.lint]
-select = ["E", "F", "I", "W"]
+select = [
+    # --- Core Safety (catch real bugs) ---
+    "E",      # pycodestyle errors (syntax issues, indentation)
+    "F",      # Pyflakes (unused imports, undefined names, redefined variables)
+    "W",      # pycodestyle warnings
+    # --- AI-Friendly Readability ---
+    "I",      # isort (consistent import ordering)
+    "UP",     # pyupgrade (modernize syntax to latest Python idioms)
+    "SIM",    # flake8-simplify (simplify complex expressions)
+    "C4",     # flake8-comprehensions (prefer comprehensions over verbose loops)
+    "RET",    # flake8-return (clean return statements)
+    # --- Bug Prevention ---
+    "B",      # flake8-bugbear (common bug patterns and design problems)
+    "PIE",    # flake8-pie (misc. lints for cleaner code)
+    "T20",    # flake8-print (catch leftover print statements)
+    "RUF",    # Ruff-specific rules
+    # --- Security Basics ---
+    "S",      # flake8-bandit (basic security checks)
+    # --- Type Hints (great for AI context) ---
+    "ANN",    # flake8-annotations (encourage type annotations)
+    # --- Code Complexity & Modernization ---
+    "FURB",   # refurb (suggest modern alternatives)
+    "PLR",    # Pylint Refactor (detect overly complex functions)
+    "C90",    # McCabe Complexity (enforce max complexity)
+]
+ignore = [
+    "ANN401",  # Dynamically typed expressions (Any)
+    "S101",    # Use of `assert` — fine in prototypes and tests
+    "E501",    # Line too long — let the formatter handle this
+    "T201",    # Print found — toggle off during prototyping, on for production
+    "PLR2004", # Magic value comparisons — too noisy for pragmatic code
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101", "S108", "ANN", "T20", "S603", "B017", "RUF001", "PLR2004", "PLR0915", "PLR0913"]
+"scripts/**/*.py" = ["T20", "ANN"]
+"src/sop_mcp/hooks.py" = ["S603"]
+"src/sop_mcp/utils/sop_parser.py" = ["RUF001"]
+"src/sop_mcp/utils/storage_backend.py" = ["UP037", "F821"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["sop_mcp"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 12
+
+[tool.ruff.lint.pylint]
+max-args = 6
+max-returns = 6
+max-branches = 12
+max-statements = 40
 
 [tool.tox]
 env_list = ["py310", "py311", "py312", "py313", "lint"]
 
 [tool.tox.env_run_base]
 description = "Run tests"
-deps = [
-    "hypothesis>=6.0.0,<6.153.0",
-    "pytest>=8.0.0",
-    "pytest-asyncio>=1.0.0",
-    "pyyaml>=6.0.3",
-    "tomli>=2.0.0;python_version<'3.11'",
-]
+group = "dev"
 commands = [["pytest", "{posargs}"]]
 
 [tool.tox.env.lint]
 description = "Run linters"
-deps = ["ruff>=0.8.0"]
+group = "dev"
 commands = [
     ["ruff", "check", "src/", "tests/"],
     ["ruff", "format", "--check", "src/", "tests/"],

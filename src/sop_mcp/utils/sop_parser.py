@@ -1,15 +1,30 @@
-"""SOP Parser module for extracting structured data from SOP markdown files.
+"""SOP Parser — load Standard Operating Procedures from flat markdown files.
 
-This module provides the SOP class for loading and accessing Standard Operating
-Procedure markdown files, plus utilities for listing and locating SOPs.
+Each SOP is stored as a single file::
 
-Storage layout:
-    src/sops/{sop_name}/
-        v{version}.md   — versioned snapshots (latest resolved by highest semver)
+    {base_dir}/{sop_name}.sop.md
 
-Naming convention:
-    Folder name = Document ID = lowercase with underscores (e.g. "sop_creation_guide")
-    Tool name   = "run_{folder_name}" (e.g. "run_sop_creation_guide")
+The file begins with YAML frontmatter carrying metadata::
+
+    ---
+    name: sop_creation_guide
+    description: Step-by-step guide for creating SOPs…   # optional
+    version: 1
+    owner: value-architects
+    stage: preprod   # or: prod
+    ---
+
+    # Title …
+
+    ## Overview
+    …
+
+    ### Step 1: …
+
+Versions are plain positive integers (``1``, ``2``, ``3``…) — no semver.
+Legacy files still carrying ``"1.0"`` / ``"1.0.0"`` are tolerated on read
+(coerced to the leading major integer); ``publish_sop`` overwrites every
+write with the new integer, so stale forms are replaced on the next publish.
 """
 
 from __future__ import annotations
@@ -19,95 +34,112 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+import yaml
 
-class ChangeType(Enum):
-    """Semantic versioning bump type for SOP publishing."""
 
-    MAJOR = "major"
-    MINOR = "minor"
-    PATCH = "patch"
+class Stage(Enum):
+    """Deployment stage of an SOP."""
+
+    PREPROD = "preprod"
+    PROD = "prod"
 
 
 # Directory where SOP files are stored
 SOPS_DIR = Path(__file__).parent.parent / "resources"
 
+# Suffix used on disk for SOP markdown files
+SOP_SUFFIX = ".sop.md"
 
-def _parse_semver(version_str: str) -> tuple[int, ...]:
-    """Parse a version string into a comparable tuple.
+# YAML frontmatter delimiter
+_FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n?", re.DOTALL)
 
-    Handles formats like "1.0", "1.0.0", "2.1.3".
+
+def _coerce_version(value: Any) -> int:
+    """Coerce a raw version value into a positive integer.
+
+    Accepts: ``1``, ``"1"``, ``"1.0"``, ``"1.0.0"``, ``"2.3"`` …
+    All dotted forms collapse to their leading major integer.
+    Raises ``ValueError`` for anything non-numeric or ``<= 0``.
     """
-    parts = version_str.strip().split(".")
-    return tuple(int(p) for p in parts)
+    if value is None:
+        return 1
+    if isinstance(value, bool):  # bool is a subclass of int — exclude explicitly
+        raise ValueError(f"Invalid version value: {value!r}")
+    if isinstance(value, int):
+        if value <= 0:
+            raise ValueError(f"Version must be a positive integer, got {value}")
+        return value
+
+    s = str(value).strip()
+    if not s:
+        return 1
+    # "1.0" / "1.0.0" → 1
+    head = s.split(".", 1)[0]
+    if not head.isdigit():
+        raise ValueError(f"Version must be a positive integer (1, 2, 3, …), got {value!r}")
+    n = int(head)
+    if n <= 0:
+        raise ValueError(f"Version must be a positive integer, got {n}")
+    return n
 
 
 class SOP:
-    """Represents a parsed Standard Operating Procedure document.
+    """Represents a parsed Standard Operating Procedure document."""
 
-    Attributes:
-        name: The SOP identifier (e.g. "SOP-AUTHORING-NEW-SOP").
-        path: Resolved file path (None if created from content).
-        title: The SOP title extracted from the level-1 heading.
-        overview: The Overview section content.
-        steps: List of step contents.
-        version: Semantic version extracted from the document (e.g. "1.0").
-        tool_name: Tool name slug derived from the document ID.
-    """
-
-    def __init__(self, name: str, version: str | None = None, base_dir: Path | None = None) -> None:
+    def __init__(self, name: str, base_dir: Path | None = None) -> None:
         self.name = name
-        sop_dir = (base_dir or SOPS_DIR) / name
+        root = base_dir or SOPS_DIR
 
-        if version is not None:
-            self.path = sop_dir / f"v{version}.md"
+        # Prefer the folder-per-SOP layout: {root}/{name}/{name}.sop.md.
+        # Fall back to the flat {root}/{name}.sop.md for legacy storage.
+        folder_path = root / name / f"{name}{SOP_SUFFIX}"
+        flat_path = root / f"{name}{SOP_SUFFIX}"
+        if folder_path.exists():
+            self.path = folder_path
+        elif flat_path.exists():
+            self.path = flat_path
         else:
-            # Resolve latest by picking the highest semver v*.md file
-            self.path = _resolve_latest_path(sop_dir)
-
-        if not self.path.exists():
-            raise FileNotFoundError(f"SOP file not found: {self.path}")
+            # Fall back to a recursive scan in case the SOP lives in a
+            # differently-named folder or a nested location.
+            matches = [p for p in root.rglob(f"*{SOP_SUFFIX}") if p.stem.removesuffix(".sop") == name]
+            if matches:
+                self.path = sorted(matches)[0]
+            else:
+                self.path = folder_path  # reported path in the error message
+                raise FileNotFoundError(f"SOP file not found: {self.path}")
 
         content = self.path.read_text(encoding="utf-8")
         parsed = _parse_content(content)
-        self.title: str = parsed["title"]
-        self.overview: str = parsed["overview"]
-        self.steps: list[str] = parsed["steps"]
-        self.version: str = parsed["version"]
-        self.tool_name: str = _name_to_tool_name(self.name)
-        self.prerequisites: str = parsed.get("prerequisites", "")
-        self.mcp_server_prerequisites: list[str] = parsed.get("mcp_server_prerequisites", [])
+
+        self._populate(parsed)
 
     @classmethod
-    def from_content(cls, content: str) -> "SOP":
-        """Create an SOP instance from raw markdown content (no file required).
-
-        The SOP name is extracted from the content via the Document ID field.
-        Expected format: lowercase words separated by underscores, at least 3 words
-        (e.g. "sop_creation_guide").
-
-        Raises ValueError if the name cannot be found or the content is malformed.
-        """
-        name = _extract_doc_id(content)
+    def from_content(cls, content: str) -> SOP:
+        """Create an SOP instance from raw markdown content (no file required)."""
+        parsed = _parse_content(content)
+        name = parsed["name"]
         if not name:
             raise ValueError(
                 "Could not extract SOP name from content. "
-                "Expected **Document ID**: with a lowercase underscore-separated name "
-                "(at least 3 words, e.g. sop_creation_guide)"
+                "Expected a YAML frontmatter `name:` field with a lowercase "
+                "underscore-separated name (at least 3 words, e.g. sop_creation_guide)"
             )
 
         instance = object.__new__(cls)
         instance.name = name
         instance.path = None
-
-        parsed = _parse_content(content)
-        instance.title = parsed["title"]
-        instance.overview = parsed["overview"]
-        instance.steps = parsed["steps"]
-        instance.version = parsed["version"]
-        instance.tool_name = _name_to_tool_name(instance.name)
-        instance.prerequisites = parsed.get("prerequisites", "")
-        instance.mcp_server_prerequisites = parsed.get("mcp_server_prerequisites", [])
+        instance._populate(parsed)
         return instance
+
+    def _populate(self, parsed: dict[str, Any]) -> None:
+        self.title: str = parsed["title"]
+        self.overview: str = parsed["overview"]
+        self.steps: list[str] = parsed["steps"]
+        self.version: int = parsed["version"]
+        self.description: str = parsed["description"]
+        self.owner: str = parsed["owner"]
+        self.stage: str = parsed["stage"]
+        self.tool_name: str = self.name
 
     @property
     def total_steps(self) -> int:
@@ -120,69 +152,60 @@ class SOP:
             return self.overview[:147] + "..."
         return self.overview
 
-    @classmethod
-    def publish(cls, content: str, change_type: ChangeType = ChangeType.MINOR) -> "SOP":
-        """Validate content, auto-bump the semantic version, write to disk, and return the SOP.
 
-        The version is determined automatically based on the change_type and the
-        latest existing version for this SOP's base name:
-        - ChangeType.MAJOR: breaking change (e.g. 1.2.0 -> 2.0.0)
-        - ChangeType.MINOR: new feature / non-breaking change (e.g. 1.2.0 -> 1.3.0)
-        - ChangeType.PATCH: bugfix (e.g. 1.2.0 -> 1.2.1)
-
-        For brand-new SOPs the initial version is 1.0.0 regardless of change_type.
-        The version is written into the document and the SOP becomes the latest.
-
-        Files are written to:
-            src/sops/{sop_name}/v{version}.md
-
-        Raises:
-            ValueError: If content is empty, malformed, or change_type is invalid.
-        """
-        if not content or not content.strip():
-            raise ValueError("SOP content is required")
-
-        if not isinstance(change_type, ChangeType):
-            raise ValueError(f"Invalid change_type '{change_type}'. Must be a ChangeType enum member.")
-
-        sop = cls.from_content(content)
-
-        # Determine the new version
-        new_version = _bump_version(sop.name, change_type)
-
-        # Update or insert the version in the content
-        content = _set_version_in_content(content, new_version)
-
-        # Write to directory structure — folder name matches doc ID (lowercase, underscores)
-        sop_dir = SOPS_DIR / sop.name
-        sop_dir.mkdir(parents=True, exist_ok=True)
-
-        versioned_path = sop_dir / f"v{new_version}.md"
-        versioned_path.write_text(content, encoding="utf-8")
-
-        # Return the freshly-loaded SOP
-        return cls(sop.name)
+# --- Frontmatter + content parsing ---
 
 
-# --- Internal parsing helpers ---
+def _split_frontmatter(content: str) -> tuple[dict[str, Any], str]:
+    """Split YAML frontmatter from the remaining markdown body.
+
+    Returns ``(metadata, body)``.  When no frontmatter is present, metadata
+    is an empty dict and body is the original content.
+    """
+    m = _FRONTMATTER_RE.match(content)
+    if not m:
+        return {}, content
+    try:
+        meta = yaml.safe_load(m.group(1)) or {}
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Invalid YAML frontmatter: {exc}") from exc
+    if not isinstance(meta, dict):
+        raise ValueError("YAML frontmatter must be a mapping")
+    return meta, content[m.end() :]
 
 
 def _parse_content(content: str) -> dict[str, Any]:
-    """Parse SOP markdown content and extract title, overview, steps, and version."""
-    title = _extract_title(content)
-    overview = _extract_overview(content)
-    steps = _extract_steps(content)
-    version = _extract_version(content)
-    prerequisites = _extract_prerequisites(content)
-    mcp_server_prerequisites = _extract_mcp_server_prerequisites(content)
+    """Parse SOP markdown content and extract frontmatter + body structure."""
+    meta, body = _split_frontmatter(content)
+
+    name = meta.get("name")
+    version = _coerce_version(meta.get("version"))
+    description = meta.get("description") or ""
+    owner = meta.get("owner") or ""
+    stage = _normalise_stage(meta.get("stage"))
+
     return {
-        "title": title,
-        "overview": overview,
-        "steps": steps,
+        "name": name,
         "version": version,
-        "prerequisites": prerequisites,
-        "mcp_server_prerequisites": mcp_server_prerequisites,
+        "description": description,
+        "owner": owner,
+        "stage": stage,
+        "title": _extract_title(body),
+        "overview": _extract_overview(body),
+        "steps": _extract_steps(body),
     }
+
+
+def _normalise_stage(value: Any) -> str:
+    """Coerce stage into one of ``preprod`` / ``prod``; default to preprod."""
+    if value is None:
+        return Stage.PREPROD.value
+    s = str(value).strip().lower()
+    if s in {"prod", "production"}:
+        return Stage.PROD.value
+    if s in {"preprod", "pre-prod", "pre_prod", "staging"}:
+        return Stage.PREPROD.value
+    raise ValueError(f"Invalid stage '{value}'. Expected 'preprod' or 'prod'.")
 
 
 def _extract_title(content: str) -> str:
@@ -208,230 +231,68 @@ def _extract_steps(content: str) -> list[str]:
     return [step.strip() for step in matches]
 
 
-def _extract_version(content: str) -> str:
-    """Extract semantic version from the SOP document metadata.
-
-    Looks for patterns like:
-    - "**Version:** 1.1"
-    - "**Version**: 1.0.0"
-    - "- **Version**: 2.0"
-    - "| **Version** | 1.1 |"  (table format)
-    Returns "1.0.0" as default if no version is found.
-    """
-    # Inline format: **Version:** 1.1 or **Version**: 1.0.0
-    match = re.search(r"\*\*Version:?\*\*:?\s*(\d+(?:\.\d+)*)", content)
-    if match:
-        return match.group(1)
-    # Table format: | **Version** | 1.1 |
-    match = re.search(r"\*\*Version\*\*\s*\|\s*(\d+(?:\.\d+)*)", content)
-    if match:
-        return match.group(1)
-    return "1.0.0"
+# --- Frontmatter writing ---
 
 
-def _extract_prerequisites(content: str) -> str:
-    """Extract the raw text of the ## Prerequisites section.
-
-    Returns the section body (everything between ``## Prerequisites`` and the
-    next ``##`` heading or end-of-document).  Returns an empty string when the
-    section is not present.
-    """
-    pattern = r"^##\s+Prerequisites\s*\n(.*?)(?=^##\s|\Z)"
-    match = re.search(pattern, content, re.MULTILINE | re.DOTALL)
-    if not match:
-        return ""
-    return match.group(1).strip()
-
-
-def _extract_mcp_server_prerequisites(content: str) -> list[str]:
-    """Extract MCP server names from the **Required MCP Servers** field.
-
-    Recognised label formats::
-
-        **Required MCP Servers** (should):
-        **Required MCP Servers**:
-
-    Each bulleted list item (``- name``) following the label is collected.
-    Descriptions after `` — ``, `` – ``, or `` - `` separators are stripped.
-    Empty or whitespace-only items are skipped.  Collection stops at the next
-    non-list-item line (blank lines are tolerated between items).
-
-    Returns an empty list when the field is not found.
-    """
-    # Match the label line — optional "(should)" and colon
-    label_pattern = r"\*\*Required MCP Servers\*\*(?:\s*\(should\))?\s*:"
-    label_match = re.search(label_pattern, content)
-    if not label_match:
-        return []
-
-    # Grab everything after the label until end-of-string
-    rest = content[label_match.end() :]
-
-    servers: list[str] = []
-    for line in rest.split("\n"):
-        stripped = line.strip()
-        # Skip blank lines between items
-        if not stripped:
-            continue
-        # A bare dash (possibly with trailing whitespace) is an empty list item — skip it
-        if stripped == "-":
-            continue
-        # Stop when we hit a non-list-item line
-        if not stripped.startswith("- "):
-            break
-        item = stripped[2:].strip()
-        # Strip description after separator: " — ", " – ", or " - "
-        item = re.split(r"\s(?:—|–|-)\s", item, maxsplit=1)[0].strip()
-        if item:
-            servers.append(item)
-
-    return servers
+def build_frontmatter(
+    *,
+    name: str,
+    version: int,
+    owner: str,
+    stage: str = Stage.PREPROD.value,
+    description: str = "",
+) -> str:
+    """Render a YAML frontmatter block with the canonical SOP fields."""
+    version_int = _coerce_version(version)
+    stage_norm = _normalise_stage(stage)
+    meta: dict[str, Any] = {
+        "name": name,
+        "version": version_int,
+        "owner": owner,
+        "stage": stage_norm,
+    }
+    if description:
+        meta["description"] = description
+    body = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True).strip()
+    return f"---\n{body}\n---\n"
 
 
-def _resolve_latest_path(sop_dir: Path) -> Path:
-    """Find the highest semver v*.md file in an SOP directory."""
-    versioned = list(sop_dir.glob("v*.md"))
-    if not versioned:
-        raise FileNotFoundError(f"SOP file not found: {sop_dir}/v*.md")
-    versioned.sort(key=lambda f: _parse_semver(f.stem[1:]), reverse=True)
-    return versioned[0]
-
-
-def _extract_doc_id(content: str) -> str | None:
-    """Extract the Document ID from SOP markdown content.
-
-    Looks for a line like:
-        - **Document ID**: sop_creation_guide
-
-    Returns the ID string (lowercase, underscores) or None if not found.
-    The ID must have at least 3 words (2+ underscores).
-    """
-    match = re.search(
-        r"\*\*Document\s+ID\*\*:?\s*([a-z][a-z0-9]*(?:_[a-z0-9]+){2,})",
-        content,
-    )
-    return match.group(1) if match else None
-
-
-def _name_to_tool_name(sop_name: str) -> str:
-    """Derive tool name from the SOP folder name.
-
-    Folder name is already lowercase with underscores (e.g. "sop_creation_guide").
-    Returns as-is since it's already in the right format.
-    """
-    return sop_name
+def set_version_in_content(content: str, version: int) -> str:
+    """Update the ``version:`` value in the frontmatter and normalise the rest."""
+    version_int = _coerce_version(version)
+    meta, body = _split_frontmatter(content)
+    if not meta:
+        raise ValueError(
+            "Cannot set version on content without YAML frontmatter. "
+            "Add a frontmatter block with at least `name:` and `version:`."
+        )
+    meta["version"] = version_int
+    if "stage" in meta:
+        meta["stage"] = _normalise_stage(meta.get("stage"))
+    new_frontmatter = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True).strip()
+    return f"---\n{new_frontmatter}\n---\n{body}"
 
 
 # --- Module-level utilities ---
 
 
-def list_available_sops() -> list[str]:
-    """Return sorted list of available SOP folder names from the sops directory.
-
-    Layout: src/sops/{name}/v{version}.md
-    Folder names are lowercase with underscores (e.g. "sop_creation_guide").
-    """
-    if not SOPS_DIR.exists():
+def list_available_sops(base_dir: Path | None = None) -> list[str]:
+    """Return sorted list of available SOP names in the resources directory."""
+    d = base_dir or SOPS_DIR
+    if not d.exists():
         return []
-
-    names: list[str] = []
-    for d in SOPS_DIR.iterdir():
-        if d.is_dir() and list(d.glob("v*.md")):
-            names.append(d.name)
-
+    names = [f.name[: -len(SOP_SUFFIX)] for f in d.rglob(f"*{SOP_SUFFIX}") if f.is_file()]
     return sorted(names)
 
 
-def list_versions(sop_name: str) -> list[str]:
-    """Return sorted list of available versions for an SOP.
-
-    Reads v*.md files from src/sops/{sop_name}/.
-    """
-    sop_dir = SOPS_DIR / sop_name
-    if not sop_dir.is_dir():
-        return []
-
-    versions = []
-    for f in sop_dir.glob("v*.md"):
-        v = f.stem[1:]  # strip leading 'v'
-        versions.append(v)
-    versions.sort(key=_parse_semver)
-    return versions
-
-
-def resolve_sop(sop_name: str, version: str | None = None) -> SOP:
-    """Resolve an SOP by folder name and optional semantic version.
-
-    The version parameter is optional. When omitted (None), latest is returned.
-
-    Args:
-        sop_name: The SOP folder name (e.g. "sop_creation_guide").
-        version: Optional semantic version string (e.g. "1.0"). Defaults to latest.
-
-    Raises:
-        FileNotFoundError: If the SOP does not exist.
-        ValueError: If the requested version is not found.
-    """
-    sop_dir = SOPS_DIR / sop_name
-    if not sop_dir.is_dir():
-        raise FileNotFoundError(f"No SOP found for '{sop_name}'")
-
-    if version is None:
-        return SOP(sop_name)
-
+def get_version(sop_name: str, base_dir: Path | None = None) -> int | None:
+    """Return the version carried in the SOP file, or ``None`` if missing."""
+    d = base_dir or SOPS_DIR
+    path = d / f"{sop_name}{SOP_SUFFIX}"
+    if not path.is_file():
+        return None
     try:
-        sop = SOP(sop_name, version=version)
-        if sop.version == version:
-            return sop
+        sop = SOP(sop_name, base_dir=d)
     except (FileNotFoundError, ValueError):
-        pass
-
-    available = list_versions(sop_name)
-    raise ValueError(f"Version '{version}' not found for '{sop_name}'. Available versions: {', '.join(available)}")
-
-
-def _bump_version(sop_name: str, change_type: ChangeType) -> str:
-    """Calculate the next version for an SOP given a change type.
-
-    If no prior versions exist, returns "1.0.0".
-    Otherwise bumps the latest version according to semver rules:
-    - ChangeType.MAJOR: X+1.0.0
-    - ChangeType.MINOR: X.Y+1.0
-    - ChangeType.PATCH: X.Y.Z+1
-    """
-    versions = list_versions(sop_name)
-
-    if not versions:
-        return "1.0.0"
-
-    latest = max(versions, key=_parse_semver)
-    parts = list(_parse_semver(latest))
-    while len(parts) < 3:
-        parts.append(0)
-
-    if change_type is ChangeType.MAJOR:
-        parts[0] += 1
-        parts[1] = 0
-        parts[2] = 0
-    elif change_type is ChangeType.MINOR:
-        parts[1] += 1
-        parts[2] = 0
-    elif change_type is ChangeType.PATCH:
-        parts[2] += 1
-
-    return ".".join(str(p) for p in parts)
-
-
-def _set_version_in_content(content: str, version: str) -> str:
-    """Insert or replace the **Version:** line in SOP markdown content."""
-    pattern = r"(\*\*Version:?\*\*:?\s*)\d+(?:\.\d+)*"
-    if re.search(pattern, content):
-        return re.sub(pattern, rf"\g<1>{version}", content, count=1)
-
-    lines = content.split("\n")
-    for i, line in enumerate(lines):
-        if line.startswith("# "):
-            lines.insert(i + 1, f"\n**Version:** {version}")
-            break
-
-    return "\n".join(lines)
+        return None
+    return sop.version
