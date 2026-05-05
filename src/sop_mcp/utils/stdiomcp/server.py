@@ -31,12 +31,25 @@ _TYPE_MAP: dict[type, str] = {
 def _build_input_schema(fn: Callable) -> dict[str, Any]:
     """Build a JSON Schema ``inputSchema`` from a function's signature."""
     sig = inspect.signature(fn)
-    hints = get_type_hints(fn)
+    hints = get_type_hints(fn, include_extras=True)
     properties: dict[str, Any] = {}
     required: list[str] = []
 
     for name, param in sig.parameters.items():
         hint = hints.get(name, str)
+        description: str | None = None
+
+        # Extract metadata from Annotated types.
+        if hasattr(hint, "__metadata__"):
+            for meta in hint.__metadata__:
+                if isinstance(meta, str):
+                    description = meta
+                elif hasattr(meta, "description") and meta.description:
+                    description = meta.description
+            # Unwrap Annotated to get the base type.
+            hint = hint.__args__[0] if hasattr(hint, "__args__") else hint
+
+        # Handle Optional (Union with None) / UnionType (3.10+).
         origin = getattr(hint, "__origin__", None)
         args = getattr(hint, "__args__", ())
         is_optional = False
@@ -48,14 +61,8 @@ def _build_input_schema(fn: Callable) -> dict[str, Any]:
 
         json_type = _TYPE_MAP.get(hint, "string")
         prop: dict[str, Any] = {"type": json_type}
-
-        ann = hints.get(name)
-        if hasattr(ann, "__metadata__"):
-            for meta in ann.__metadata__:
-                if isinstance(meta, str):
-                    prop["description"] = meta
-                elif hasattr(meta, "description") and meta.description:
-                    prop["description"] = meta.description
+        if description:
+            prop["description"] = description
 
         properties[name] = prop
         if param.default is inspect.Parameter.empty and not is_optional:
@@ -104,8 +111,11 @@ class _ResourceInfo:
 class StdioMCP:
     """Lightweight MCP server — stdio only, zero C-dependencies."""
 
-    def __init__(self, name: str = "MCP Server", resources_as_tools: bool = True, **kwargs: Any) -> None:
+    def __init__(
+        self, name: str = "MCP Server", resources_as_tools: bool = True, instructions: str = "", **kwargs: Any
+    ) -> None:
         self.name = name
+        self.instructions = instructions
         self._tools: dict[str, _ToolInfo] = {}
         self._resources: dict[str, _ResourceInfo] = {}
         self._subscriptions: set[str] = set()
@@ -277,17 +287,17 @@ class StdioMCP:
     _handle_request = _dispatch
 
     def _handle_initialize(self, params: dict[str, Any], req_id: Any) -> dict[str, Any]:
-        return self._rpc_result(
-            req_id,
-            {
-                "protocolVersion": PROTOCOL_VERSION,
-                "capabilities": {
-                    "tools": {"listChanged": False},
-                    "resources": {"subscribe": True, "listChanged": True},
-                },
-                "serverInfo": {"name": self.name, "version": "1.0.0"},
+        result: dict[str, Any] = {
+            "protocolVersion": PROTOCOL_VERSION,
+            "capabilities": {
+                "tools": {"listChanged": False},
+                "resources": {"subscribe": True, "listChanged": True},
             },
-        )
+            "serverInfo": {"name": self.name, "version": "1.0.0"},
+        }
+        if self.instructions:
+            result["instructions"] = self.instructions
+        return self._rpc_result(req_id, result)
 
     def _handle_ping(self, params: dict[str, Any], req_id: Any) -> dict[str, Any]:
         return self._rpc_result(req_id, {})

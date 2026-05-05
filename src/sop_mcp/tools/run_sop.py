@@ -1,7 +1,9 @@
 """Start or advance a Standard Operating Procedure."""
 
+from __future__ import annotations
+
 import logging
-from typing import Any
+from typing import Annotated, Any
 
 from src.sop_mcp.utils import SOP
 from src.sop_mcp.utils.storage import LocalFilesystemBackend
@@ -24,9 +26,11 @@ DESCRIPTION = (
 
 
 def handler(
-    sop_name: str,
-    current_step: int = 0,
-    step_output: str | None = None,
+    sop_name: Annotated[str, "Name of the SOP to execute (use list_resources to discover available SOPs)"],
+    current_step: Annotated[int, "Step number to advance from. 0 to start, N to advance past step N"] = 0,
+    step_output: Annotated[
+        str | None, "Concrete output you produced for the completed step. Required when current_step >= 1"
+    ] = None,
 ) -> dict[str, Any]:
     """Start or advance an SOP — returns the next step."""
     logger.info("Invoking run_sop: sop_name=%s, current_step=%s", sop_name, current_step)

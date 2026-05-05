@@ -1,8 +1,7 @@
 """Publish SOP tool."""
 
 import logging
-from enum import Enum
-from typing import Any
+from typing import Annotated, Any
 
 from src.sop_mcp.utils import SOP, register_sop_resources, set_version_in_content
 from src.sop_mcp.utils.sop_parser import _normalise_stage, _split_frontmatter
@@ -12,13 +11,6 @@ logger = logging.getLogger(__name__)
 
 
 backend = LocalFilesystemBackend.from_env()
-
-
-class Scope(Enum):
-    """Scope of an SOP document."""
-
-    PERSONAL = "personal"
-    SHARED = "shared"
 
 
 NAME = "publish_sop"
@@ -37,9 +29,7 @@ DESCRIPTION = (
     "# My SOP\\n\\n## Overview\\nOverview text.\\n\\n"
     '### Step 1: First step\\nDo the thing."}\n\n'
     "Versioning: plain positive integers — 1, 2, 3, 4, … New SOPs start at 1; "
-    "each subsequent publish increments by one. No semver.\n\n"
-    "SOPs are published as personal (private) by default. Use scope='shared' "
-    "for team-wide SOPs."
+    "each subsequent publish increments by one. No semver."
 )
 
 
@@ -83,19 +73,16 @@ def _refresh_resources() -> None:
 
 
 def handler(
-    content: str,
-    stage: str,
-    scope: str = "personal",
+    content: Annotated[str, "Complete SOP markdown with YAML frontmatter (name, owner, stage, version)"],
+    stage: Annotated[str, "Deployment stage: 'preprod' or 'prod'"],
 ) -> dict[str, Any]:
     """Publish a new or updated SOP document."""
-    sc = Scope(scope) if isinstance(scope, str) else scope
     stage_norm = _normalise_stage(stage)
 
     logger.info(
-        "Invoking publish_sop with args: content=<%s chars>, stage=%s, scope=%s",
+        "Invoking publish_sop with args: content=<%s chars>, stage=%s",
         len(content),
         stage_norm,
-        sc.value,
     )
 
     sop = SOP.from_content(content)
@@ -122,10 +109,9 @@ def handler(
         "version": new_version,
         "stage": sop.stage,
         "owner": sop.owner,
-        "scope": sc.value,
         "total_steps": sop.total_steps,
         "path": str(written_path.relative_to(backend.base_dir)),
-        "message": f"SOP '{sop.name}' published as v{new_version} ({sop.stage}) with {sc.value} scope.",
+        "message": f"SOP '{sop.name}' published as v{new_version} ({sop.stage}).",
     }
 
     warnings = _collect_warnings(sop)

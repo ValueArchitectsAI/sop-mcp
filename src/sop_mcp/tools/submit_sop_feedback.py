@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import Annotated, Any
 
 from src.sop_mcp.utils import SOP
 from src.sop_mcp.utils.storage import LocalFilesystemBackend
@@ -23,8 +23,8 @@ DESCRIPTION = (
 
 
 def handler(
-    sop_name: str,
-    feedback: str,
+    sop_name: Annotated[str, "Name of the SOP to submit feedback for"],
+    feedback: Annotated[str, "Improvement feedback text — what worked, what needs fixing"],
 ) -> dict[str, Any]:
     """Record feedback for an SOP as a JSON line in the feedback log."""
     logger.info("Invoking submit_sop_feedback: sop_name=%s, feedback=<%s chars>", sop_name, len(feedback))

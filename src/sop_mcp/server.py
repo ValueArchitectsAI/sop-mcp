@@ -55,7 +55,15 @@ def _init_hooks() -> HookExecutor | None:
 
 
 # Initialize MCP server
-mcp = StdioMCP("SOP MCP Server")
+mcp = StdioMCP(
+    "SOP MCP Server",
+    instructions=(
+        "This server guides you through Standard Operating Procedures (SOPs) one step at a time. "
+        "Use list_resources to discover available SOPs, then run_sop to execute them step by step. "
+        "You MUST execute each step's actions before advancing — do not skip or summarize. "
+        "Use publish_sop to create new SOPs and submit_sop_feedback to record improvement suggestions."
+    ),
+)
 
 # Register tools
 for _mod in (run_sop, publish_sop, submit_sop_feedback):
