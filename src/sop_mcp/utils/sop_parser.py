@@ -340,7 +340,7 @@ def resolve_sop(sop_name: str, version: int | None = None) -> SOP:
     if not path.is_file():
         raise FileNotFoundError(f"No SOP found for '{sop_name}'")
 
-    sop = SOP(sop_name, version=version)
+    sop = SOP(sop_name)
     if version is not None and sop.version != _coerce_version(version):
         raise ValueError(f"Version '{version}' not found for '{sop_name}'. Available version: {sop.version}")
     return sop
