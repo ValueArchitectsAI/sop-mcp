@@ -11,7 +11,7 @@ import logging
 import mimetypes
 from typing import Any
 
-from .storage_backend import get_storage_backend
+from .storage import LocalFilesystemBackend
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +160,7 @@ def register_sop_resources(
     from .sop_parser import SOP
 
     if backend is None:
-        backend = get_storage_backend()
+        backend = LocalFilesystemBackend.from_env()
 
     _clear_sop_resources(mcp)
 

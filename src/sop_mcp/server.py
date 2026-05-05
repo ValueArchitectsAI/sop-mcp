@@ -10,13 +10,14 @@ import os
 
 from src.sop_mcp.hooks import HookExecutor, install_hooks
 from src.sop_mcp.tools import publish_sop, run_sop, submit_sop_feedback
-from src.sop_mcp.utils import get_storage_backend, register_sop_resources
+from src.sop_mcp.utils import register_sop_resources
 from src.sop_mcp.utils.stdiomcp import StdioMCP
+from src.sop_mcp.utils.storage import LocalFilesystemBackend
 
 logger = logging.getLogger(__name__)
 
 # Initialize storage backend at module level
-backend = get_storage_backend()
+backend = LocalFilesystemBackend.from_env()
 
 
 def _init_hooks() -> HookExecutor | None:

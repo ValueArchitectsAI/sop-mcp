@@ -13,7 +13,6 @@ from .sop_parser import (
     set_version_in_content,
 )
 from .storage import LocalFilesystemBackend
-from .storage_backend import get_storage_backend
 
 __all__ = [
     "SOP",
@@ -22,7 +21,6 @@ __all__ = [
     "LocalFilesystemBackend",
     "Stage",
     "build_frontmatter",
-    "get_storage_backend",
     "list_available_sops",
     "list_versions",
     "register_sop_resources",
