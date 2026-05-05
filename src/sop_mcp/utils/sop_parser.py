@@ -334,13 +334,3 @@ def list_versions(sop_name: str, base_dir: Path | None = None) -> list[int]:
     return [sop.version]
 
 
-def resolve_sop(sop_name: str, version: int | None = None) -> SOP:
-    """Resolve an SOP by name and optional version."""
-    path = SOPS_DIR / f"{sop_name}{SOP_SUFFIX}"
-    if not path.is_file():
-        raise FileNotFoundError(f"No SOP found for '{sop_name}'")
-
-    sop = SOP(sop_name)
-    if version is not None and sop.version != _coerce_version(version):
-        raise ValueError(f"Version '{version}' not found for '{sop_name}'. Available version: {sop.version}")
-    return sop

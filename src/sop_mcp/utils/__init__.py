@@ -9,7 +9,6 @@ from .sop_parser import (
     build_frontmatter,
     list_available_sops,
     list_versions,
-    resolve_sop,
     set_version_in_content,
 )
 from .storage import LocalFilesystemBackend
@@ -24,6 +23,5 @@ __all__ = [
     "list_available_sops",
     "list_versions",
     "register_sop_resources",
-    "resolve_sop",
     "set_version_in_content",
 ]
