@@ -19,7 +19,9 @@
 
 * seed full SOP folders so attachments travel with their SOP ([9349d8a](https://github.com/ValueArchitectsAI/sop-mcp/commit/9349d8a))
 * route stdio tool calls through call_tool so hooks fire ([6d84851](https://github.com/ValueArchitectsAI/sop-mcp/commit/6d84851))
+* resolve validator warnings in sop_creation_guide and add validate_sop.py ([c8f5d28](https://github.com/ValueArchitectsAI/sop-mcp/commit/c8f5d28))
 * remove version argument from SOP instantiation in resolve_sop ([d81f262](https://github.com/ValueArchitectsAI/sop-mcp/commit/d81f262))
+* remove unreachable code block left in _extract_steps ([3e8e937](https://github.com/ValueArchitectsAI/sop-mcp/commit/3e8e937))
 
 ## [0.9.4](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.9.3...v0.9.4) (2026-04-12)
 
