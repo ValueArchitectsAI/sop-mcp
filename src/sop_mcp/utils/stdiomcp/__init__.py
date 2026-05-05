@@ -8,6 +8,5 @@ Only depends on the Python standard library + pydantic.
 """
 
 from src.sop_mcp.utils.stdiomcp.server import StdioMCP
-from src.sop_mcp.utils.stdiomcp.testing import Client
 
-__all__ = ["Client", "StdioMCP"]
+__all__ = ["StdioMCP"]
