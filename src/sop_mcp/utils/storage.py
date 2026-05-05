@@ -83,14 +83,16 @@ class LocalFilesystemBackend:
     def from_env(cls) -> LocalFilesystemBackend:
         """Create from environment variables.
 
-        ``SOP_STORAGE_DIR`` → use that path, seed from bundled.
-        Otherwise → use bundled directory directly.
+        ``SOP_STORAGE_DIR`` → use that path, seed from bundled SOPs on first run.
+        Otherwise → default to ``~/.sop_mcp`` (also seeded from bundled).
+
+        We never write into the installed package directory: ``uvx`` caches
+        get wiped and replaced, so any SOPs a user publishes would silently
+        disappear. A stable per-user default avoids that footgun.
         """
         storage_dir = os.environ.get("SOP_STORAGE_DIR", "").strip()
-        if storage_dir:
-            base_dir = _validate_storage_path(storage_dir)
-            return cls(base_dir=base_dir, seed_dir=BUNDLED_SOPS_DIR)
-        return cls(base_dir=BUNDLED_SOPS_DIR)
+        base_dir = _validate_storage_path(storage_dir) if storage_dir else Path.home() / ".sop_mcp"
+        return cls(base_dir=base_dir, seed_dir=BUNDLED_SOPS_DIR)
 
     @property
     def base_dir(self) -> Path:

@@ -16,11 +16,20 @@ List all available resources with their URIs and descriptions.
 Publish a new or updated Standard Operating Procedure document.
 
 The content parameter MUST contain the complete SOP markdown string with YAML frontmatter declaring:
-  - name   (required, snake_case, ≥3 underscore segments)
-  - owner  (required, non-empty string — team, alias, or email)
-  - stage  (required, 'preprod' or 'prod')
-  - version (auto-managed by this tool; set to 1 for new SOPs)
-  - description (optional — when omitted, the SOP's `## Overview` section is used for short summaries)
+  - name    (required, snake_case, ≥3 underscore segments — the SOP's identity)
+  - owner   (required, non-empty string — team, alias, or email. This is the
+            point of contact surfaced when feedback is submitted or a mismatch
+            is detected during review. Pick a name you want pinged.)
+  - stage   (required, 'preprod' or 'prod' — informational lifecycle label;
+            see the `stage` argument below for mismatch behaviour)
+  - version (required, positive integer — advisory revision counter. The tool
+            auto-bumps on each publish (+1), but we ask authors to declare it
+            explicitly so a mismatch between the file on disk and what the
+            author thinks they are updating is visible in the response)
+  - description (optional — when omitted, the SOP's `## Overview` section is
+            used for short summaries)
+
+Version & stage mismatch: the tool never trusts the frontmatter values blindly. The `stage` argument wins over the frontmatter `stage`, and the version is computed server-side (max existing + 1). Both values are overwritten in the stored content so the file on disk always reflects what actually happened. If you pass a version or stage that disagrees with the final stored values, the response surfaces the difference under `warning` so you can decide whether you were editing the right version.
 
 Example call: {"content": "---\nname: my_sop_name\nversion: 1\nowner: my-team\nstage: preprod\n---\n\n# My SOP\n\n## Overview\nOverview text.\n\n### Step 1: First step\nDo the thing."}
 
@@ -92,5 +101,4 @@ for review when the SOP is next revised.
 | `sop://code_review_process` | This SOP defines the standard process for conducting code reviews to ensure code quality, consistenc |
 | `sop://employee_onboarding_setup` | This SOP defines the steps for onboarding a new employee, covering the initial setup tasks: obtainin |
 | `sop://sop_creation_guide` | Step-by-step guide for creating SOPs using RFC 2119 requirement levels. SOPs are delivered one step  |
-| `sop://sop_creation_guide/validate_sop.py` | Attachment 'validate_sop.py' for SOP 'sop_creation_guide' |
 | `sop://user_onboarding_process` | This SOP defines the standard process for onboarding new users to the organization's systems and too |

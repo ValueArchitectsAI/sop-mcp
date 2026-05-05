@@ -18,12 +18,25 @@ DESCRIPTION = (
     "Publish a new or updated Standard Operating Procedure document.\n\n"
     "The content parameter MUST contain the complete SOP markdown string with "
     "YAML frontmatter declaring:\n"
-    "  - name   (required, snake_case, ≥3 underscore segments)\n"
-    "  - owner  (required, non-empty string — team, alias, or email)\n"
-    "  - stage  (required, 'preprod' or 'prod')\n"
-    "  - version (auto-managed by this tool; set to 1 for new SOPs)\n"
-    "  - description (optional — when omitted, the SOP's `## Overview` section "
-    "is used for short summaries)\n\n"
+    "  - name    (required, snake_case, ≥3 underscore segments — the SOP's identity)\n"
+    "  - owner   (required, non-empty string — team, alias, or email. This is the\n"
+    "            point of contact surfaced when feedback is submitted or a mismatch\n"
+    "            is detected during review. Pick a name you want pinged.)\n"
+    "  - stage   (required, 'preprod' or 'prod' — informational lifecycle label;\n"
+    "            see the `stage` argument below for mismatch behaviour)\n"
+    "  - version (required, positive integer — advisory revision counter. The tool\n"
+    "            auto-bumps on each publish (+1), but we ask authors to declare it\n"
+    "            explicitly so a mismatch between the file on disk and what the\n"
+    "            author thinks they are updating is visible in the response)\n"
+    "  - description (optional — when omitted, the SOP's `## Overview` section is\n"
+    "            used for short summaries)\n\n"
+    "Version & stage mismatch: the tool never trusts the frontmatter values blindly. "
+    "The `stage` argument wins over the frontmatter `stage`, and the version is "
+    "computed server-side (max existing + 1). Both values are overwritten in the "
+    "stored content so the file on disk always reflects what actually happened. "
+    "If you pass a version or stage that disagrees with the final stored values, "
+    "the response surfaces the difference under `warning` so you can decide whether "
+    "you were editing the right version.\n\n"
     'Example call: {"content": "---\\nname: my_sop_name\\nversion: 1\\n'
     "owner: my-team\\nstage: preprod\\n---\\n\\n"
     "# My SOP\\n\\n## Overview\\nOverview text.\\n\\n"
@@ -62,6 +75,39 @@ def _collect_warnings(sop: SOP) -> list[str]:
     return warnings
 
 
+def _collect_mismatch_warnings(
+    *,
+    declared_version: int | None,
+    final_version: int,
+    declared_stage: str,
+    final_stage: str,
+    owner: str,
+) -> list[str]:
+    """Surface disagreements between what the caller sent and what was stored.
+
+    Authors edit SOPs in their own tooling and can end up publishing against a
+    version they no longer hold — we want that to be loud, not silent. The
+    owner is included so the response points at the person to ping.
+    """
+    warnings: list[str] = []
+
+    if declared_version is not None and declared_version != final_version:
+        warnings.append(
+            f"Frontmatter declared version {declared_version} but this publish stored "
+            f"version {final_version} (previous max + 1). If you expected to update "
+            f"v{declared_version}, contact the owner ({owner}) — someone else may have "
+            "published in between."
+        )
+
+    if declared_stage and declared_stage != final_stage:
+        warnings.append(
+            f"Frontmatter stage was '{declared_stage}' but the `stage` argument "
+            f"('{final_stage}') took precedence. The stored file now reads '{final_stage}'."
+        )
+
+    return warnings
+
+
 def _refresh_resources() -> None:
     """Re-register MCP resources after a publish."""
     try:
@@ -90,6 +136,12 @@ def handler(
     if not sop.owner:
         raise ValueError("Frontmatter `owner` is required and must be a non-empty string.")
 
+    # Capture what the author declared before we overwrite it — these feed
+    # the mismatch warnings so the author can tell whether they were editing
+    # the file they thought they were.
+    declared_version = sop.version
+    declared_stage = sop.stage
+
     existing_versions = backend.list_versions(sop.name)
     new_version = 1 if not existing_versions else _bump(max(existing_versions))
 
@@ -114,7 +166,13 @@ def handler(
         "message": f"SOP '{sop.name}' published as v{new_version} ({sop.stage}).",
     }
 
-    warnings = _collect_warnings(sop)
+    warnings = _collect_warnings(sop) + _collect_mismatch_warnings(
+        declared_version=declared_version,
+        final_version=new_version,
+        declared_stage=declared_stage,
+        final_stage=sop.stage,
+        owner=sop.owner,
+    )
     if warnings:
         result["warning"] = " | ".join(warnings)
     return result

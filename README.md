@@ -34,8 +34,11 @@ Or add manually:
 
 ## How It Works
 
+Every session starts the same way — discover what's available, then execute.
+
 ```
-run_sop(sop_name="sop_creation_guide")              → Step 1 + instructions
+list_resources()                                     → catalog of sop:// URIs
+run_sop(sop_name="sop_creation_guide")               → Step 1 + instructions
 run_sop(..., current_step=1, step_output="...")      → Step 2
 run_sop(..., current_step=2, step_output="...")      → Step 3
   ...
@@ -44,13 +47,28 @@ run_sop(..., current_step=N, step_output="...")      → Completion
 
 Each response tells the agent to *execute* the step — not just read it.
 
+## Bundled SOPs
+
+Four SOPs ship with the server so new users can try `run_sop` immediately:
+
+| SOP                         | What it does                                                             |
+| --------------------------- | ------------------------------------------------------------------------ |
+| `sop_creation_guide`        | Step-by-step guide for authoring new SOPs with RFC 2119 requirements     |
+| `code_review_process`       | Standard code review workflow — prepare, review, address feedback, merge |
+| `employee_onboarding_setup` | IT setup for a new hire — alias, email, hardware selection               |
+| `user_onboarding_process`   | Provision identity, application access, and welcome package              |
+
+Storage default: `~/.sop_mcp` (seeded from the bundled SOPs on first run). Override with `SOP_STORAGE_DIR`.
+
 ## Tools
 
-| Tool                  | Purpose                        |
-| --------------------- | ------------------------------ |
-| `run_sop`             | Execute an SOP step by step    |
-| `publish_sop`         | Create or update an SOP        |
-| `submit_sop_feedback` | Record improvement suggestions |
+| Tool                  | Purpose                                                |
+| --------------------- | ------------------------------------------------------ |
+| `list_resources`      | Discover available SOPs (built in to every MCP client) |
+| `read_resource`       | Read an SOP's full content before executing it         |
+| `run_sop`             | Execute an SOP step by step                            |
+| `publish_sop`         | Create or update an SOP                                |
+| `submit_sop_feedback` | Record improvement suggestions                         |
 
 Full parameter reference: [docs/mcp-reference.md](docs/mcp-reference.md)
 
