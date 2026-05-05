@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.9.4...v0.10.0) (2026-05-05)
+
+
+### Features
+
+* add list_resources to llms.txt tool reference ([#83](https://github.com/ValueArchitectsAI/sop-mcp/issues/83)) ([a3b15ed](https://github.com/ValueArchitectsAI/sop-mcp/commit/a3b15edd4cfdfe37d3aa6888c2e78f4e1067dda1))
+
 ## [0.9.4](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.9.3...v0.9.4) (2026-04-12)
 
 
