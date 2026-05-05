@@ -42,11 +42,10 @@ Step-by-step guide for creating SOPs using RFC 2119 requirement levels. SOPs are
 
 **Actions**:
 1. Create the document header:
-   - `# title`, `## Document Information` (Document ID, Version), `## Overview`, `## Prerequisites`
+   - `# title`, `## Document Information` (Document ID, Version), `## Overview`, 
 2. Break the process into sequential steps using `### Step N: Title`
 3. For each step include: Objective, Actions, Requirements (using RFC 2119), Expected Output, Time Estimate
-4. If steps reference MCP tools, add `**Required MCP Servers**` in Prerequisites
-5. Add a final feedback step using `submit_sop_feedback`
+4. Add a final feedback step using `submit_sop_feedback`
 
 **Requirements**:
 - You MUST use `### Step N:` heading syntax for each step

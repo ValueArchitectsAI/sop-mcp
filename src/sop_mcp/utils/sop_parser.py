@@ -140,8 +140,6 @@ class SOP:
         self.owner: str = parsed["owner"]
         self.stage: str = parsed["stage"]
         self.tool_name: str = self.name
-        self.prerequisites: str = parsed.get("prerequisites", "")
-        self.mcp_server_prerequisites: list[str] = parsed.get("mcp_server_prerequisites", [])
 
     @property
     def total_steps(self) -> int:
@@ -195,8 +193,6 @@ def _parse_content(content: str) -> dict[str, Any]:
         "title": _extract_title(body),
         "overview": _extract_overview(body),
         "steps": _extract_steps(body),
-        "prerequisites": _extract_prerequisites(body),
-        "mcp_server_prerequisites": _extract_mcp_server_prerequisites(body),
     }
 
 
@@ -235,15 +231,6 @@ def _extract_steps(content: str) -> list[str]:
     return [step.strip() for step in matches]
 
 
-def _extract_prerequisites(content: str) -> str:
-    pattern = r"^##\s+Prerequisites\s*\n(.*?)(?=^##\s|\Z)"
-    match = re.search(pattern, content, re.MULTILINE | re.DOTALL)
-    if not match:
-        return ""
-    return match.group(1).strip()
-
-
-def _extract_mcp_server_prerequisites(content: str) -> list[str]:
     """Extract MCP server names listed under ``**Required MCP Servers**``."""
     label_pattern = r"\*\*Required MCP Servers\*\*(?:\s*\(should\))?\s*:"
     label_match = re.search(label_pattern, content)
