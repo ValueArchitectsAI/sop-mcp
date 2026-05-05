@@ -104,7 +104,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101", "ANN", "T20", "S603", "B017", "RUF001", "PLR2004", "PLR0915", "PLR0913"]
+"tests/**/*.py" = ["S101", "S108", "ANN", "T20", "S603", "B017", "RUF001", "PLR2004", "PLR0915", "PLR0913"]
 "scripts/**/*.py" = ["T20", "ANN"]
 "src/sop_mcp/hooks.py" = ["S603"]
 "src/sop_mcp/utils/sop_parser.py" = ["RUF001"]

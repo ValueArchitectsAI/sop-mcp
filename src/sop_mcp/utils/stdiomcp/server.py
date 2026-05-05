@@ -305,9 +305,11 @@ class StdioMCP:
         if name not in self._tools:
             return self._rpc_error(req_id, -32602, f"Unknown tool: {name}")
 
+        import asyncio
+
         try:
-            result = self._tools[name].fn(**arguments)
-            content = [{"type": "text", "text": json.dumps(result)}]
+            result = asyncio.run(self.call_tool(name, arguments))
+            content = [{"type": "text", "text": result}]
             return self._rpc_result(req_id, {"content": content})
         except Exception as e:
             content = [{"type": "text", "text": json.dumps({"error": str(e)})}]
