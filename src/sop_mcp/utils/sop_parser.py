@@ -230,7 +230,6 @@ def _extract_steps(content: str) -> list[str]:
         raise ValueError("SOP file has no steps (expected ### Step N: format)")
     return [step.strip() for step in matches]
 
-
     """Extract MCP server names listed under ``**Required MCP Servers**``."""
     label_pattern = r"\*\*Required MCP Servers\*\*(?:\s*\(should\))?\s*:"
     label_match = re.search(label_pattern, content)
@@ -319,5 +318,3 @@ def get_version(sop_name: str, base_dir: Path | None = None) -> int | None:
     except (FileNotFoundError, ValueError):
         return None
     return sop.version
-
-

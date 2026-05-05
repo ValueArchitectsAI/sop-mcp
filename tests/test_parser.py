@@ -10,7 +10,6 @@ Tests cover:
 import string
 
 import pytest
-from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from src.sop_mcp.utils.sop_parser import SOP, list_available_sops
@@ -223,5 +222,3 @@ def _build_sop_without_servers() -> str:
         "- Some general prerequisite\n\n"
         "### Step 1: Do something\n\nDo the thing.\n"
     )
-
-
