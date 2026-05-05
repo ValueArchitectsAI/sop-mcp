@@ -26,12 +26,17 @@ scripts/
 
 ```bash
 uv sync                        # install dependencies
+uv run pre-commit install      # wire up lint + doc-regen hooks
 uv run pytest                  # run tests (80 tests, ~9s)
 uv run sop-mcp                 # start server (stdio transport)
 uv run ruff check src/         # lint
 uv run ruff format src/        # format
 uv run python scripts/generate_docs.py  # regenerate docs
 ```
+
+The pre-commit hook regenerates `docs/mcp-reference.md` and `llms.txt`
+whenever `src/sop_mcp/**/*.py` or `scripts/generate_docs.py` changes, so
+the auto-generated docs can't drift from the server.
 
 ## Testing
 

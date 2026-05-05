@@ -82,50 +82,56 @@ def _generate_reference(tools, resources) -> str:
     return "\n".join(lines)
 
 
+_CONFIG_SNIPPET = """## Configuration
+
+```json
+{
+  "mcpServers": {
+    "sop-mcp": {
+      "command": "uvx",
+      "args": ["sop-mcp"],
+      "env": { "SOP_STORAGE_DIR": "/path/to/sops" }
+    }
+  }
+}
+```
+"""
+
+_USAGE_SNIPPET = """## Usage
+
+1. Call `list_resources` to discover available SOPs
+2. Call `run_sop(sop_name="...")` to start executing an SOP
+3. Execute each step, then call `run_sop(current_step=N, step_output="...")` to advance
+4. Use `publish_sop` to create new SOPs
+5. Use `submit_sop_feedback` to record improvement suggestions
+"""
+
+
 def _generate_llms_txt(tools, resources) -> str:
     """Generate llms.txt — concise server description for AI discovery."""
-    lines: list[str] = []
-    lines.append("# SOP-MCP")
-    lines.append("")
-    lines.append("An MCP server that guides AI agents through Standard Operating Procedures (SOPs) one step at a time.")
-    lines.append("")
-    lines.append("## Tools")
-    lines.append("")
+    lines: list[str] = [
+        "# SOP-MCP",
+        "",
+        "An MCP server that guides AI agents through Standard Operating Procedures (SOPs) one step at a time.",
+        "",
+        "## Tools",
+        "",
+    ]
     for tool in sorted(tools, key=lambda t: t.name):
         if tool.name in ("list_resources", "read_resource"):
             continue  # skip auto-generated resource tools
         desc = (tool.description or "").split("\n")[0]
         lines.append(f"- **{tool.name}**: {desc}")
-    lines.append("")
-    lines.append("## Resources")
-    lines.append("")
+
+    lines.extend(["", "## Resources", ""])
     for r in sorted(resources, key=lambda r: str(r.uri)):
         if "/" in str(r.uri).replace("sop://", ""):
             continue  # skip attachment sub-resources
         lines.append(f"- `{r.uri}`: {r.description or r.name}")
+
     lines.append("")
-    lines.append("## Usage")
-    lines.append("")
-    lines.append("1. Call `list_resources` to discover available SOPs")
-    lines.append("2. Call `run_sop(sop_name=\"...\")` to start executing an SOP")
-    lines.append("3. Execute each step, then call `run_sop(current_step=N, step_output=\"...\")` to advance")
-    lines.append("4. Use `publish_sop` to create new SOPs")
-    lines.append("5. Use `submit_sop_feedback` to record improvement suggestions")
-    lines.append("")
-    lines.append("## Configuration")
-    lines.append("")
-    lines.append("```json")
-    lines.append('{')
-    lines.append('  "mcpServers": {')
-    lines.append('    "sop-mcp": {')
-    lines.append('      "command": "uvx",')
-    lines.append('      "args": ["sop-mcp"],')
-    lines.append('      "env": { "SOP_STORAGE_DIR": "/path/to/sops" }')
-    lines.append("    }")
-    lines.append("  }")
-    lines.append("}")
-    lines.append("```")
-    lines.append("")
+    lines.append(_USAGE_SNIPPET)
+    lines.append(_CONFIG_SNIPPET)
 
     return "\n".join(lines)
 
