@@ -7,6 +7,7 @@ An MCP server that guides AI agents through Standard Operating Procedures (SOPs)
 - **publish_sop**: Publish a new or updated Standard Operating Procedure document.
 - **run_sop**: Start or advance a Standard Operating Procedure step by step. Use list_resources to discover available SOPs, then call this tool with the SOP name.
 - **submit_sop_feedback**: Submit improvement feedback for a specific SOP.
+- **list_resources**: Discover all available SOPs by URI.
 
 ## Resources
 
