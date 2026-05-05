@@ -128,18 +128,12 @@ env_list = ["py310", "py311", "py312", "py313", "lint"]
 
 [tool.tox.env_run_base]
 description = "Run tests"
-deps = [
-    "hypothesis>=6.0.0,<6.152.0",
-    "pytest>=8.0.0",
-    "pytest-asyncio>=1.0.0",
-    "pyyaml>=6.0.3",
-    "tomli>=2.0.0;python_version<'3.11'",
-]
+group = "dev"
 commands = [["pytest", "{posargs}"]]
 
 [tool.tox.env.lint]
 description = "Run linters"
-deps = ["ruff>=0.8.0"]
+group = "dev"
 commands = [
     ["ruff", "check", "src/", "tests/"],
     ["ruff", "format", "--check", "src/", "tests/"],
