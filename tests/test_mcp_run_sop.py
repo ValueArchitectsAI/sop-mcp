@@ -135,6 +135,21 @@ async def test_error_step_beyond_total(mcp_transport):
             )
 
 
+async def test_error_step_output_too_large(mcp_transport):
+    """step_output above 50 KB raises an error naming the byte limit."""
+    import pytest
+    from fastmcp.exceptions import ToolError
+
+    oversized = "x" * (50 * 1024 + 1)
+
+    async with Client(mcp_transport) as client:
+        with pytest.raises(ToolError, match=r"exceeds 51200 bytes"):
+            await client.call_tool(
+                "run_sop",
+                {"sop_name": "sop_creation_guide", "current_step": 1, "step_output": oversized},
+            )
+
+
 # ---------------------------------------------------------------------------
 # Full walkthrough
 # ---------------------------------------------------------------------------

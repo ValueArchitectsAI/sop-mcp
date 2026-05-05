@@ -24,6 +24,11 @@ DESCRIPTION = (
     "output you produced for the completed step."
 )
 
+# Hard cap on step_output size. 50 KB fits any reasonable step summary or
+# artifact reference; anything larger is almost certainly accidental log
+# dumping or a malicious payload trying to bloat server-side state.
+MAX_STEP_OUTPUT_BYTES = 50 * 1024
+
 
 def handler(
     sop_name: Annotated[str, "Name of the SOP to execute (use list_resources to discover available SOPs)"],
@@ -42,6 +47,13 @@ def handler(
         raise ValueError(
             "step_output is required when current_step >= 1. "
             "Provide the concrete output you produced for the completed step."
+        )
+
+    if step_output is not None and len(step_output.encode("utf-8")) > MAX_STEP_OUTPUT_BYTES:
+        raise ValueError(
+            f"step_output exceeds {MAX_STEP_OUTPUT_BYTES} bytes "
+            f"({len(step_output.encode('utf-8'))} received). "
+            "Summarise the step output instead of including full logs or artifacts."
         )
 
     sop = SOP(sop_name, base_dir=backend.base_dir)
