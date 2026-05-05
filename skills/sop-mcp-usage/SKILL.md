@@ -121,5 +121,5 @@ What this SOP accomplishes.
 
 - Start with `list_resources` to see what's available
 - Use `read_resource(uri="sop://name")` to preview an SOP before executing
-- After completing an SOP, always offer to submit feedback
+- After completing an SOP, offer to submit feedback
 - When creating SOPs, use the `sop_creation_guide` SOP itself as a guide

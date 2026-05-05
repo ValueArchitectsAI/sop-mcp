@@ -1,7 +1,6 @@
 ---
 name: code_review_process
-description: This SOP defines the standard process for conducting code reviews to
-  ensure code quality, consistency, and knowledge sharing across the team.
+description: Standard process for conducting code reviews to keep code quality, consistency, and knowledge sharing across the team.
 version: 1
 owner: Engineering Team
 stage: preprod
@@ -10,26 +9,9 @@ stage: preprod
 # Standard Operating Procedure: Code Review Process
 
 ## Overview
-This SOP defines the standard process for conducting code reviews to ensure code quality, consistency, and knowledge sharing across the team.
+Standard process for conducting code reviews to keep code quality, consistency, and knowledge sharing across the team.
 
-## Scope
-This SOP applies to:
-- All software engineers submitting code changes
-- Code reviewers providing feedback
-- Team leads overseeing code quality
-
-## Definitions
-- **CR**: Code Review — a peer review of source code changes
-- **Author**: The engineer who wrote the code changes
-- **Reviewer**: The engineer reviewing the code changes
-
-## Prerequisites
-- Access to the code review tool
-- Familiarity with the team's coding standards
-
----
-
-## Procedure
+## Steps
 
 ### Step 1: Prepare Changes for Review
 
@@ -47,9 +29,9 @@ This SOP applies to:
 - You SHOULD keep changes focused on a single concern
 - You MAY include screenshots for UI changes
 
-**Expected Output**:
-- All tests passing locally
-- A code review created with title, description, and assigned reviewers
+**Expected Output**: All tests passing locally and a code review created with title, description, and assigned reviewers.
+
+**Time Estimate**: 15-30 minutes
 
 ---
 
@@ -70,9 +52,9 @@ This SOP applies to:
 - You SHOULD approve only when all critical issues are resolved
 - You MAY suggest improvements that are not blocking
 
-**Expected Output**:
-- Review comments posted on the CR
-- Clear approval or request-for-changes status
+**Expected Output**: Review comments posted on the CR and a clear approval or request-for-changes status.
+
+**Time Estimate**: 20-40 minutes
 
 ---
 
@@ -92,12 +74,6 @@ This SOP applies to:
 - You SHOULD squash commits for a clean history
 - You MAY merge without re-review for minor fixes
 
-**Expected Output**:
-- All review comments resolved
-- Code merged to the target branch
+**Expected Output**: All review comments resolved and code merged to the target branch.
 
----
-
-## References
-- Team coding standards document
-- Conventional Commits specification (https://www.conventionalcommits.org/)
+**Time Estimate**: 15-30 minutes

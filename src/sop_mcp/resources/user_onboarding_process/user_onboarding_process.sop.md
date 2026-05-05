@@ -1,8 +1,6 @@
 ---
 name: user_onboarding_process
-description: This SOP defines the standard process for onboarding new users to the
-  organization's systems and tools, ensuring consistent access provisioning and a
-  smooth first-day experience.
+description: Standard process for onboarding new users to the organization's systems and tools with consistent access provisioning.
 version: 1
 owner: IT Operations Team
 stage: preprod
@@ -11,26 +9,9 @@ stage: preprod
 # Standard Operating Procedure: User Onboarding Process
 
 ## Overview
-This SOP defines the standard process for onboarding new users to the organization's systems and tools, ensuring consistent access provisioning and a smooth first-day experience.
+Standard process for onboarding new users to the organization's systems and tools, ensuring consistent access provisioning and a smooth first-day experience.
 
-## Scope
-This SOP applies to:
-- IT administrators provisioning new user accounts
-- Team leads requesting access for new hires
-- HR coordinators initiating the onboarding workflow
-
-## Definitions
-- **IAM**: Identity and Access Management
-- **SSO**: Single Sign-On
-- **MFA**: Multi-Factor Authentication
-
-## Prerequisites
-- Approved hire confirmation from HR
-- Manager-approved access request form
-
----
-
-## Procedure
+## Steps
 
 ### Step 1: Create User Identity
 
@@ -48,10 +29,9 @@ This SOP applies to:
 - You SHOULD use the naming convention: firstname.lastname
 - You MAY create an alias if there is a naming conflict
 
-**Expected Output**:
-- User account created in identity provider
-- Temporary credentials generated
-- MFA enrollment pending
+**Expected Output**: User account created in the identity provider, temporary credentials generated, MFA enrollment pending.
+
+**Time Estimate**: 15-20 minutes
 
 ---
 
@@ -71,10 +51,9 @@ This SOP applies to:
 - You SHOULD document any exceptions to standard access
 - You MAY grant temporary elevated access with manager approval and an expiry date
 
-**Expected Output**:
-- All role-required applications accessible via SSO
-- Non-SSO accounts created and documented
-- Access verification checklist completed
+**Expected Output**: All role-required applications accessible via SSO, non-SSO accounts created and documented, access verification checklist completed.
+
+**Time Estimate**: 20-30 minutes
 
 ---
 
@@ -94,14 +73,6 @@ This SOP applies to:
 - You SHOULD include a troubleshooting FAQ in the welcome package
 - You MAY assign a buddy from the team for first-week support
 
-**Expected Output**:
-- Welcome email sent with secure credential delivery
-- First-day IT check-in scheduled
-- All access verified and onboarding marked complete
+**Expected Output**: Welcome email sent with secure credential delivery, first-day IT check-in scheduled, all access verified and onboarding marked complete.
 
----
-
-## References
-- Organization IAM Policy
-- Role-Based Access Control Matrix
-- Security Onboarding Checklist
+**Time Estimate**: 15-20 minutes

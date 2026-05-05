@@ -52,7 +52,7 @@ Step-by-step guide for creating SOPs using RFC 2119 requirement levels. SOPs are
 - You MUST use `### Step N:` heading syntax for each step
 - You MUST use RFC 2119 keywords correctly:
   - **MUST**: absolute requirements (safety, legal, essential for success)
-  - **SHOULD**: best practices with valid alternatives
+  - **SHOULD**: recommended practice with valid alternatives
   - **MAY**: truly optional enhancements
 - You MUST write each step as self-contained — the executor sees only one step at a time
 - You MUST describe concrete expected output for each step
