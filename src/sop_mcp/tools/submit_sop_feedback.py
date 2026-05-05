@@ -54,5 +54,5 @@ def handler(
         "sop_name": sop_name,
         "sop_version": sop.version,
         "timestamp": timestamp,
-        "message": f"Feedback recorded for '{sop_name}' (v{sop.version}). It will be considered in the next revision.",
+        "message": f"Feedback recorded for '{sop_name}'.",
     }

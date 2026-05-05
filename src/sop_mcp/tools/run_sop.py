@@ -26,11 +26,10 @@ DESCRIPTION = (
 def handler(
     sop_name: str,
     current_step: int = 0,
-    version: str | None = None,
     step_output: str | None = None,
 ) -> dict[str, Any]:
     """Start or advance an SOP — returns the next step."""
-    logger.info("Invoking run_sop: sop_name=%s, current_step=%s, version=%s", sop_name, current_step, version)
+    logger.info("Invoking run_sop: sop_name=%s, current_step=%s", sop_name, current_step)
 
     if not backend.sop_exists(sop_name):
         raise ValueError(f"SOP '{sop_name}' not found. Available: {', '.join(backend.list_sops())}")
@@ -41,7 +40,7 @@ def handler(
             "Provide the concrete output you produced for the completed step."
         )
 
-    sop = SOP(sop_name, version=version, base_dir=backend.base_dir)
+    sop = SOP(sop_name, base_dir=backend.base_dir)
     total = sop.total_steps
 
     if current_step < 0 or current_step > total:

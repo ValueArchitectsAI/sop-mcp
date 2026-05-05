@@ -86,7 +86,7 @@ def _coerce_version(value: Any) -> int:
 class SOP:
     """Represents a parsed Standard Operating Procedure document."""
 
-    def __init__(self, name: str, version: int | None = None, base_dir: Path | None = None) -> None:
+    def __init__(self, name: str, base_dir: Path | None = None) -> None:
         self.name = name
         root = base_dir or SOPS_DIR
 
@@ -110,12 +110,6 @@ class SOP:
 
         content = self.path.read_text(encoding="utf-8")
         parsed = _parse_content(content)
-
-        # When an explicit version is requested, verify it matches the file.
-        if version is not None and parsed["version"] != _coerce_version(version):
-            raise FileNotFoundError(
-                f"Version '{version}' not found for '{name}'. Available version: {parsed['version']}"
-            )
 
         self._populate(parsed)
 

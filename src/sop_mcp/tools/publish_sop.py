@@ -1,7 +1,6 @@
 """Publish SOP tool."""
 
 import logging
-import re
 from enum import Enum
 from typing import Any
 
@@ -39,12 +38,6 @@ DESCRIPTION = (
     '### Step 1: First step\\nDo the thing."}\n\n'
     "Versioning: plain positive integers — 1, 2, 3, 4, … New SOPs start at 1; "
     "each subsequent publish increments by one. No semver.\n\n"
-    "Layout: SOPs are stored flat in the storage directory by default. Pass an "
-    "optional `path` (e.g. 'generated/', 'teams/eng/') to group the file under "
-    "a subdirectory — identity is still the frontmatter `name`, so path is "
-    "organizational only. When an SOP with the same `name` already exists at a "
-    "different path, the publish is rejected to prevent duplicates; omit "
-    "`path` to update an existing SOP in place.\n\n"
     "SOPs are published as personal (private) by default. Use scope='shared' "
     "for team-wide SOPs."
 )
@@ -76,15 +69,6 @@ def _collect_warnings(sop: SOP) -> list[str]:
             "**Time Estimate:** field. Each step SHOULD include an estimated duration in minutes."
         )
 
-    if not sop.mcp_server_prerequisites:
-        tool_pattern = re.compile(r"`\w+`\s+tool|call\s+the\s+`?\w+`?\s+tool", re.IGNORECASE)
-        if tool_pattern.search("\n".join(sop.steps)):
-            warnings.append(
-                "SOP steps reference MCP tools but no **Required MCP Servers** "
-                "field was found in the Prerequisites section. Each SOP SHOULD "
-                "declare required MCP servers."
-            )
-
     return warnings
 
 
@@ -102,46 +86,30 @@ def handler(
     content: str,
     stage: str,
     scope: str = "personal",
-    path: str | None = None,
 ) -> dict[str, Any]:
     """Publish a new or updated SOP document."""
     sc = Scope(scope) if isinstance(scope, str) else scope
-    try:
-        stage_norm = _normalise_stage(stage)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    stage_norm = _normalise_stage(stage)
 
     logger.info(
-        "Invoking publish_sop with args: content=<%s chars>, stage=%s, scope=%s, path=%s",
+        "Invoking publish_sop with args: content=<%s chars>, stage=%s, scope=%s",
         len(content),
         stage_norm,
         sc.value,
-        path,
     )
 
-    try:
-        sop = SOP.from_content(content)
-    except ValueError as e:
-        logger.warning("publish_sop error: %s", e)
-        return {"error": str(e)}
+    sop = SOP.from_content(content)
 
     if not sop.owner:
-        return {"error": "Frontmatter `owner` is required and must be a non-empty string."}
+        raise ValueError("Frontmatter `owner` is required and must be a non-empty string.")
 
     existing_versions = backend.list_versions(sop.name)
     new_version = 1 if not existing_versions else _bump(max(existing_versions))
 
-    try:
-        content = _overwrite_meta(content, version=new_version, stage=stage_norm)
-        content = set_version_in_content(content, new_version)
-    except ValueError as e:
-        return {"error": str(e)}
+    content = _overwrite_meta(content, version=new_version, stage=stage_norm)
+    content = set_version_in_content(content, new_version)
 
-    try:
-        written_path = backend.write_sop(sop.name, new_version, content, path=path)
-    except (OSError, ValueError) as e:
-        logger.warning("publish_sop error: %s", e)
-        return {"error": str(e)}
+    written_path = backend.write_sop(sop.name, new_version, content)
 
     sop = SOP.from_content(content)
     _refresh_resources()

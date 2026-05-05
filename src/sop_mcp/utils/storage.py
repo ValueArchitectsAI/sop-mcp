@@ -18,8 +18,9 @@ Callers may group SOPs under a parent directory via ``path=`` on
     {base_dir}/teams/eng/{name}/{name}.feedback.jsonl
 
 Feedback is treated as **append-only**: the ``submit_sop_feedback`` tool
-appends entries via ``append_feedback``, and ``.feedback.jsonl`` files are
-exposed as readable MCP resources alongside other SOP attachments.
+appends entries via ``append_feedback``.  Feedback files are not exposed
+as MCP resources — they live inside the SOP folder but are hidden from
+``list_attachments`` and ``read_attachment``.
 
 Discovery is recursive: any ``*.sop.md`` under ``base_dir`` at any depth
 is picked up.  SOP identity is the frontmatter ``name`` — the folder
@@ -316,7 +317,8 @@ class LocalFilesystemBackend:
     def list_attachments(self, name: str) -> list[str]:
         """Return sorted relative paths of every attachment in the SOP folder.
 
-        Excludes the SOP markdown file itself.
+        Excludes the SOP markdown file itself and any ``*.feedback.jsonl``
+        logs — feedback is append-only and not exposed as a readable resource.
         Skips hidden files (``.foo``) and entries in
         ``_ATTACHMENT_BLACKLIST`` so cache dirs and editor metadata don't
         leak into ``resources/list``.
@@ -332,6 +334,8 @@ class LocalFilesystemBackend:
                 continue
             if sop_path is not None and path.resolve() == sop_path.resolve():
                 continue  # the SOP itself isn't an attachment
+            if path.name.endswith(FEEDBACK_SUFFIX):
+                continue  # feedback is not exposed as a resource
             rel = path.relative_to(sidecar)
             if any(part in self._ATTACHMENT_BLACKLIST or part.startswith(".") for part in rel.parts):
                 continue
@@ -339,7 +343,12 @@ class LocalFilesystemBackend:
         return found
 
     def read_attachment(self, name: str, relative_path: str) -> bytes:
-        """Read an attachment's raw bytes by SOP name and relative path."""
+        """Read an attachment's raw bytes by SOP name and relative path.
+
+        Rejects any path that targets a ``*.feedback.jsonl`` file.
+        """
+        if relative_path.endswith(FEEDBACK_SUFFIX):
+            raise FileNotFoundError(f"Attachment '{relative_path}' is not available: feedback logs are not exposed.")
         sidecar = self._attachment_dir(name)
         if sidecar is None:
             raise FileNotFoundError(f"No sidecar folder for SOP '{name}'")

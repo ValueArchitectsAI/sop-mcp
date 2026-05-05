@@ -1,26 +1,33 @@
 """Shared pytest fixtures for sop-mcp tests.
 
-The most important one — ``_isolate_bundled_sops_dir`` — is autouse and
-session-scoped.  It snapshots the contents of ``src/sop_mcp/resources/``
-at session start and wipes any extra files at session end.  This protects
-the bundled SOP catalogue from leaking test-generated markdown files
-produced by hypothesis round-trips, e2e publish calls, and anything else
-that forgets to tidy up after itself.
+Provides:
+- ``_isolate_bundled_sops_dir``: session-scoped autouse fixture that
+  snapshots bundled SOPs and restores them at teardown.
+- ``mcp_server``: function-scoped fixture that returns StdioTransport
+  config for spawning the sop-mcp server. Tests open the client
+  themselves following FastMCP best practices.
 
-The fixture does **not** mask leaks during a test run — it runs cleanup
-at teardown, not between tests — because some tests depend on files
-persisting across multiple hypothesis examples inside the same function.
-It does ensure the repository is never left polluted after a pytest run.
+Best practices (from https://gofastmcp.com/development/tests):
+- Single behavior per test
+- Self-contained setup — runnable in any order, in parallel
+- Clear intent — test names describe the verified behavior
+- Don't open clients in fixtures (event loop issues)
 """
 
 from __future__ import annotations
 
 import contextlib
+import os
+import sys
 from pathlib import Path
 
 import pytest
 
 from src.sop_mcp.utils.storage import BUNDLED_SOPS_DIR
+
+# ---------------------------------------------------------------------------
+# Session-scoped: protect bundled SOPs from test pollution
+# ---------------------------------------------------------------------------
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -32,7 +39,6 @@ def _isolate_bundled_sops_dir() -> None:
 
 
 def _snapshot(root: Path) -> dict[Path, bytes]:
-    """Return a {relative_path: bytes} map of the directory contents."""
     if not root.is_dir():
         return {}
     out: dict[Path, bytes] = {}
@@ -43,12 +49,10 @@ def _snapshot(root: Path) -> dict[Path, bytes]:
 
 
 def _restore(root: Path, snapshot: dict[Path, bytes]) -> None:
-    """Delete anything not in ``snapshot`` and rewrite anything that drifted."""
     if not root.is_dir():
         return
 
     kept = set(snapshot.keys())
-    # Drop files that weren't there at session start.
     for path in list(root.rglob("*")):
         if not path.is_file():
             continue
@@ -57,15 +61,38 @@ def _restore(root: Path, snapshot: dict[Path, bytes]) -> None:
             with contextlib.suppress(OSError):
                 path.unlink()
 
-    # Rewrite any file whose contents changed during the session.
     for rel, original in snapshot.items():
         target = root / rel
         if not target.exists() or target.read_bytes() != original:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(original)
 
-    # Clean up any now-empty directories created by nested test writes.
     for path in sorted(root.rglob("*"), key=lambda p: len(p.parts), reverse=True):
         if path.is_dir() and not any(path.iterdir()):
             with contextlib.suppress(OSError):
                 path.rmdir()
+
+
+# ---------------------------------------------------------------------------
+# MCP server transport fixture
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mcp_transport(tmp_path: Path):
+    """Return a StdioTransport configured to spawn sop-mcp with isolated storage.
+
+    Tests should open the client themselves:
+
+        async with Client(mcp_transport) as client:
+            result = await client.call_tool(...)
+
+    This follows FastMCP best practice: don't open clients in fixtures.
+    """
+    from fastmcp.client.transports import StdioTransport
+
+    return StdioTransport(
+        command=sys.executable,
+        args=["-c", "from src.sop_mcp.server import run; run()"],
+        env={**os.environ, "SOP_STORAGE_DIR": str(tmp_path)},
+    )
