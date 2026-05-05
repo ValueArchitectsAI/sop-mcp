@@ -5,24 +5,21 @@ each inside its own enclosing folder.  Feedback is a JSONL log sitting
 *next to* the SOP's folder, not inside it::
 
     {base_dir}/{name}/{name}.sop.md       # SOP document
+    {base_dir}/{name}/{name}.feedback.jsonl  # append-only feedback log
     {base_dir}/{name}/rubric.md           # optional sibling attachments
     {base_dir}/{name}/examples/diff.png   # …at any depth
-    {base_dir}/{name}.feedback.jsonl      # append-only feedback log
 
 Callers may group SOPs under a parent directory via ``path=`` on
-``write_sop``; the SOP's own folder is nested beneath that parent, and
-feedback lives as a sibling of that folder::
+``write_sop``; the SOP's own folder is nested beneath that parent::
 
     {base_dir}/generated/{name}/{name}.sop.md
-    {base_dir}/generated/{name}.feedback.jsonl
+    {base_dir}/generated/{name}/{name}.feedback.jsonl
     {base_dir}/teams/eng/{name}/{name}.sop.md
-    {base_dir}/teams/eng/{name}.feedback.jsonl
+    {base_dir}/teams/eng/{name}/{name}.feedback.jsonl
 
-Feedback is treated as **write-only**: the ``submit_sop_feedback`` tool
-appends entries via ``append_feedback``, ``.feedback.jsonl`` files are
-never registered as MCP resources, and ``read_attachment`` refuses to
-serve them.  The backend exposes no read method for feedback — inspecting
-the log is an out-of-band concern (open the ``.jsonl`` directly).
+Feedback is treated as **append-only**: the ``submit_sop_feedback`` tool
+appends entries via ``append_feedback``, and ``.feedback.jsonl`` files are
+exposed as readable MCP resources alongside other SOP attachments.
 
 Discovery is recursive: any ``*.sop.md`` under ``base_dir`` at any depth
 is picked up.  SOP identity is the frontmatter ``name`` — the folder
@@ -65,11 +62,9 @@ class LocalFilesystemBackend:
     def __init__(
         self,
         base_dir: Path,
-        is_ephemeral: bool = False,
         seed_dir: Path | None = None,
     ) -> None:
         self._base_dir = base_dir
-        self._is_ephemeral = is_ephemeral
         self._duplicate_warnings: list[str] = []
         # Cached {name: path} map from the last scan.  ``None`` means
         # dirty — callers must re-scan before trusting the result.  The
@@ -87,22 +82,18 @@ class LocalFilesystemBackend:
     def from_env(cls) -> LocalFilesystemBackend:
         """Create from environment variables.
 
-        ``SOP_STORAGE_DIR`` → use that path, seed from bundled, not ephemeral.
-        Otherwise → use bundled directory, marked ephemeral.
+        ``SOP_STORAGE_DIR`` → use that path, seed from bundled.
+        Otherwise → use bundled directory directly.
         """
         storage_dir = os.environ.get("SOP_STORAGE_DIR", "").strip()
         if storage_dir:
             base_dir = _validate_storage_path(storage_dir)
-            return cls(base_dir=base_dir, is_ephemeral=False, seed_dir=BUNDLED_SOPS_DIR)
-        return cls(base_dir=BUNDLED_SOPS_DIR, is_ephemeral=True)
+            return cls(base_dir=base_dir, seed_dir=BUNDLED_SOPS_DIR)
+        return cls(base_dir=BUNDLED_SOPS_DIR)
 
     @property
     def base_dir(self) -> Path:
         return self._base_dir
-
-    @property
-    def is_ephemeral(self) -> bool:
-        return self._is_ephemeral
 
     @property
     def duplicate_name_warnings(self) -> list[str]:
@@ -170,13 +161,11 @@ class LocalFilesystemBackend:
     def _feedback_path_for(self, sop_path: Path) -> Path:
         """Compute the feedback path for an SOP.
 
-        Feedback sits **next to** the SOP's folder, never inside it, so
-        the SOP folder stays a clean authoring surface (only content the
-        author owns) while the append-only feedback log accumulates
-        alongside it.
+        Feedback lives **inside** the SOP's folder alongside the markdown
+        file, keeping all SOP artifacts co-located.
 
         - Nested layout (``{…}/{name}/{name}.sop.md``) →
-          ``{…}/{name}.feedback.jsonl`` sibling of the folder.
+          ``{…}/{name}/{name}.feedback.jsonl`` inside the folder.
         - Flat layout (``{…}/{name}.sop.md``) →
           ``{…}/{name}.feedback.jsonl`` sibling of the file.
         """
@@ -184,7 +173,7 @@ class LocalFilesystemBackend:
         parent = sop_path.parent
         # Nested layout: the SOP's parent folder is named after the SOP.
         if parent.name == name:
-            return parent.parent / f"{name}{FEEDBACK_SUFFIX}"
+            return parent / f"{name}{FEEDBACK_SUFFIX}"
         # Flat layout: feedback is a sibling of the SOP file itself.
         return parent / f"{name}{FEEDBACK_SUFFIX}"
 
@@ -327,9 +316,7 @@ class LocalFilesystemBackend:
     def list_attachments(self, name: str) -> list[str]:
         """Return sorted relative paths of every attachment in the SOP folder.
 
-        Excludes the SOP markdown file itself and any ``*.feedback.jsonl``
-        logs — feedback is treated as write-only from the agent's
-        perspective and MUST NOT be exposed as a readable resource.
+        Excludes the SOP markdown file itself.
         Skips hidden files (``.foo``) and entries in
         ``_ATTACHMENT_BLACKLIST`` so cache dirs and editor metadata don't
         leak into ``resources/list``.
@@ -345,8 +332,6 @@ class LocalFilesystemBackend:
                 continue
             if sop_path is not None and path.resolve() == sop_path.resolve():
                 continue  # the SOP itself isn't an attachment
-            if path.name.endswith(FEEDBACK_SUFFIX):
-                continue  # feedback is write-only — never expose as a resource
             rel = path.relative_to(sidecar)
             if any(part in self._ATTACHMENT_BLACKLIST or part.startswith(".") for part in rel.parts):
                 continue
@@ -354,14 +339,7 @@ class LocalFilesystemBackend:
         return found
 
     def read_attachment(self, name: str, relative_path: str) -> bytes:
-        """Read an attachment's raw bytes by SOP name and relative path.
-
-        Rejects any path that targets a ``*.feedback.jsonl`` log so
-        callers cannot bypass ``list_attachments`` by guessing the
-        filename.
-        """
-        if relative_path.endswith(FEEDBACK_SUFFIX):
-            raise FileNotFoundError(f"Attachment '{relative_path}' is not available: feedback logs are write-only.")
+        """Read an attachment's raw bytes by SOP name and relative path."""
         sidecar = self._attachment_dir(name)
         if sidecar is None:
             raise FileNotFoundError(f"No sidecar folder for SOP '{name}'")

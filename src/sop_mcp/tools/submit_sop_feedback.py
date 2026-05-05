@@ -12,18 +12,11 @@ logger = logging.getLogger(__name__)
 
 backend = LocalFilesystemBackend.from_env()
 
-
-EPHEMERAL_WARNING = (
-    "⚠️ WARNING: This data was written to ephemeral storage and may be lost "
-    "when the package cache is refreshed. Set the SOP_STORAGE_DIR environment "
-    "variable to a persistent path to avoid data loss."
-)
-
 NAME = "submit_sop_feedback"
 DESCRIPTION = (
     "Submit improvement feedback for a specific SOP.\n\n"
     "Feedback is appended as a single JSON line to\n"
-    "{sop_name}.feedback.jsonl sitting next to the SOP's folder. Each entry\n"
+    "{sop_name}.feedback.jsonl inside the SOP's folder. Each entry\n"
     "captures the SOP version, a UTC timestamp, and the feedback text — ready\n"
     "for review when the SOP is next revised."
 )
@@ -56,13 +49,10 @@ def handler(
         return {"error": f"Failed to write feedback file: {e}"}
 
     logger.info("Feedback recorded for %s v%s at %s", sop_name, sop.version, timestamp)
-    result: dict[str, Any] = {
+    return {
         "success": True,
         "sop_name": sop_name,
         "sop_version": sop.version,
         "timestamp": timestamp,
         "message": f"Feedback recorded for '{sop_name}' (v{sop.version}). It will be considered in the next revision.",
     }
-    if backend.is_ephemeral:
-        result["warning"] = EPHEMERAL_WARNING
-    return result

@@ -210,7 +210,7 @@ __marimo__/
 
 # SOP feedback files (generated at runtime by E2E tests and users)
 **/feedback.md
-src/sop_mcp/resources/*.feedback.jsonl
+src/sop_mcp/resources/**/*.feedback.jsonl
 
 # Ephemeral one-shot scripts (per workspace code-execution rules)
 tmp_*.py

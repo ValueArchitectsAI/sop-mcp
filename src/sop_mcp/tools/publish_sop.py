@@ -22,12 +22,6 @@ class Scope(Enum):
     SHARED = "shared"
 
 
-EPHEMERAL_WARNING = (
-    "⚠️ WARNING: This data was written to ephemeral storage and may be lost "
-    "when the package cache is refreshed. Set the SOP_STORAGE_DIR environment "
-    "variable to a persistent path to avoid data loss."
-)
-
 NAME = "publish_sop"
 DESCRIPTION = (
     "Publish a new or updated Standard Operating Procedure document.\n\n"
@@ -74,9 +68,6 @@ def _overwrite_meta(content: str, *, version: int, stage: str) -> str:
 def _collect_warnings(sop: SOP) -> list[str]:
     """Collect post-publish warnings about the SOP quality."""
     warnings: list[str] = []
-
-    if backend.is_ephemeral:
-        warnings.append(EPHEMERAL_WARNING)
 
     steps_missing_time = [i + 1 for i, step in enumerate(sop.steps) if "**Time Estimate:**" not in step]
     if steps_missing_time:

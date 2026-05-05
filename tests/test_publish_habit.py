@@ -67,7 +67,7 @@ def isolated_publish(tmp_path: Path, monkeypatch):
     ``StdioMCP`` instance so the ``sop://`` resource list starts empty
     and we can observe exactly what each publish registers.
     """
-    backend = LocalFilesystemBackend(base_dir=tmp_path, is_ephemeral=False)
+    backend = LocalFilesystemBackend(base_dir=tmp_path)
     mcp = StdioMCP("test-mcp")
 
     monkeypatch.setattr(publish_module, "backend", backend)

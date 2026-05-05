@@ -39,7 +39,7 @@ def backend_with_attachments(tmp_path: Path):
     """Fresh backend holding one SOP and a sidecar folder with
     several attachments."""
     base = tmp_path
-    backend = LocalFilesystemBackend(base_dir=base, is_ephemeral=False)
+    backend = LocalFilesystemBackend(base_dir=base)
 
     # The SOP markdown.
     (base / "attach_sop_one.sop.md").write_text(SOP_CONTENT)

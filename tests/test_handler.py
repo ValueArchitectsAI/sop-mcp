@@ -215,7 +215,7 @@ async def test_property_missing_mcp_server_prerequisites_produces_warning(
     content = _build_sop_with_tool_refs_no_prereqs(doc_id, tool_name)
     sop_dir = BUNDLED_SOPS_DIR / doc_id  # nested layout: {base}/{name}/{name}.sop.md
     sop_file = BUNDLED_SOPS_DIR / f"{doc_id}.sop.md"  # flat layout fallback
-    feedback_file = BUNDLED_SOPS_DIR / f"{doc_id}.feedback.jsonl"
+    feedback_file = BUNDLED_SOPS_DIR / doc_id / f"{doc_id}.feedback.jsonl"  # inside the SOP folder
     try:
         result = await call_tool("publish_sop", {"content": content, "stage": "preprod"})
         assert result.get("success") is True

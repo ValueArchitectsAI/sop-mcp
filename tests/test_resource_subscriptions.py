@@ -93,7 +93,7 @@ class TestPublishEmitsUpdated:
         import src.sop_mcp.tools.publish_sop as publish_module
         from src.sop_mcp.utils.storage import LocalFilesystemBackend
 
-        backend = LocalFilesystemBackend(base_dir=tmp_path, is_ephemeral=False)
+        backend = LocalFilesystemBackend(base_dir=tmp_path)
         mcp_server = StdioMCP("test-mcp")
         mcp_server._subscriptions.add("sop://subbed_sop")
 
