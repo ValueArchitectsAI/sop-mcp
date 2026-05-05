@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.10.0](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.9.4...v0.10.0) (2026-05-05)
+
+
+### Features
+
+* add list_resources to llms.txt tool reference ([#83](https://github.com/ValueArchitectsAI/sop-mcp/issues/83)) ([a3b15ed](https://github.com/ValueArchitectsAI/sop-mcp/commit/a3b15edd4cfdfe37d3aa6888c2e78f4e1067dda1))
+* flat SOP layout with YAML frontmatter and integer versions ([#82](https://github.com/ValueArchitectsAI/sop-mcp/issues/82)) ([f001022](https://github.com/ValueArchitectsAI/sop-mcp/commit/f001022))
+* cap step_output at 50 KB to bound input size ([c917da1](https://github.com/ValueArchitectsAI/sop-mcp/commit/c917da1))
+* improve adoption with stable storage default, catalog, and publish mismatch warnings ([ee56ea5](https://github.com/ValueArchitectsAI/sop-mcp/commit/ee56ea5))
+* add server instructions, parameter descriptions, and doc generator ([907f63b](https://github.com/ValueArchitectsAI/sop-mcp/commit/907f63b))
+* expose SOP attachments via sop://{name}/{relative_path} ([3d9deb8](https://github.com/ValueArchitectsAI/sop-mcp/commit/3d9deb8))
+* support resources/subscribe and per-resource updated notifications ([7352df7](https://github.com/ValueArchitectsAI/sop-mcp/commit/7352df7))
+* require stage parameter on publish_sop and overwrite frontmatter on write ([7b63ba6](https://github.com/ValueArchitectsAI/sop-mcp/commit/7b63ba6))
+
+
+### Bug Fixes
+
+* seed full SOP folders so attachments travel with their SOP ([9349d8a](https://github.com/ValueArchitectsAI/sop-mcp/commit/9349d8a))
+* route stdio tool calls through call_tool so hooks fire ([6d84851](https://github.com/ValueArchitectsAI/sop-mcp/commit/6d84851))
+* resolve validator warnings in sop_creation_guide and add validate_sop.py ([c8f5d28](https://github.com/ValueArchitectsAI/sop-mcp/commit/c8f5d28))
+* remove version argument from SOP instantiation in resolve_sop ([d81f262](https://github.com/ValueArchitectsAI/sop-mcp/commit/d81f262))
+* remove unreachable code block left in _extract_steps ([3e8e937](https://github.com/ValueArchitectsAI/sop-mcp/commit/3e8e937))
+
 ## [0.9.4](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.9.3...v0.9.4) (2026-04-12)
 
 
