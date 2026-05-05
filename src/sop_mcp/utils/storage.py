@@ -262,16 +262,16 @@ class LocalFilesystemBackend:
         """Return a sorted list of SOP names discovered recursively."""
         return sorted(self._scan().keys())
 
-    def list_versions(self, name: str) -> list[str]:
-        """Return the single version carried in the file, or ``[]`` if missing."""
+    def get_version(self, name: str) -> str | None:
+        """Return the version carried in the file, or ``None`` if missing."""
         path = self._sop_path(name)
         if path is None:
-            return []
+            return None
         try:
             sop = SOP.from_content(path.read_text(encoding="utf-8"))
         except (ValueError, FileNotFoundError):
-            return []
-        return [sop.version]
+            return None
+        return sop.version
 
     def sop_exists(self, name: str, version: str | None = None) -> bool:
         path = self._sop_path(name)
@@ -327,7 +327,7 @@ class LocalFilesystemBackend:
         """
         sidecar = self._attachment_dir(name)
         if sidecar is None:
-            return []
+            return None
         sop_path = self._sop_path(name)
 
         found: list[str] = []

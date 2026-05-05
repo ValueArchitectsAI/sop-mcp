@@ -321,16 +321,16 @@ def list_available_sops(base_dir: Path | None = None) -> list[str]:
     return sorted(names)
 
 
-def list_versions(sop_name: str, base_dir: Path | None = None) -> list[int]:
-    """Return the single version carried in the SOP file, or ``[]`` if missing."""
+def get_version(sop_name: str, base_dir: Path | None = None) -> int | None:
+    """Return the version carried in the SOP file, or ``None`` if missing."""
     d = base_dir or SOPS_DIR
     path = d / f"{sop_name}{SOP_SUFFIX}"
     if not path.is_file():
-        return []
+        return None
     try:
         sop = SOP(sop_name, base_dir=d)
     except (FileNotFoundError, ValueError):
-        return []
-    return [sop.version]
+        return None
+    return sop.version
 
 

@@ -8,7 +8,7 @@ from .sop_parser import (
     Stage,
     build_frontmatter,
     list_available_sops,
-    list_versions,
+    get_version,
     set_version_in_content,
 )
 from .storage import LocalFilesystemBackend
@@ -21,7 +21,7 @@ __all__ = [
     "Stage",
     "build_frontmatter",
     "list_available_sops",
-    "list_versions",
+    "get_version",
     "register_sop_resources",
     "set_version_in_content",
 ]

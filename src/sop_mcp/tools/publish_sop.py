@@ -142,8 +142,8 @@ def handler(
     declared_version = sop.version
     declared_stage = sop.stage
 
-    existing_versions = backend.list_versions(sop.name)
-    new_version = 1 if not existing_versions else _bump(max(existing_versions))
+    existing_version = backend.get_version(sop.name)
+    new_version = 1 if existing_version is None else _bump(existing_version)
 
     content = _overwrite_meta(content, version=new_version, stage=stage_norm)
     content = set_version_in_content(content, new_version)
