@@ -230,28 +230,6 @@ def _extract_steps(content: str) -> list[str]:
         raise ValueError("SOP file has no steps (expected ### Step N: format)")
     return [step.strip() for step in matches]
 
-    """Extract MCP server names listed under ``**Required MCP Servers**``."""
-    label_pattern = r"\*\*Required MCP Servers\*\*(?:\s*\(should\))?\s*:"
-    label_match = re.search(label_pattern, content)
-    if not label_match:
-        return []
-
-    rest = content[label_match.end() :]
-    servers: list[str] = []
-    for line in rest.split("\n"):
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if stripped == "-":
-            continue
-        if not stripped.startswith("- "):
-            break
-        item = stripped[2:].strip()
-        item = re.split(r"\s(?:—|–|-)\s", item, maxsplit=1)[0].strip()
-        if item:
-            servers.append(item)
-    return servers
-
 
 # --- Frontmatter writing ---
 
