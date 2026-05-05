@@ -1,6 +1,7 @@
 # SOP-MCP Server Reference
 
-Auto-generated from the running server's tool and resource schemas.
+> Auto-generated from the running server. Do not edit manually.
+> Regenerate with: `uv run python scripts/generate_docs.py`
 
 ## Tools
 
@@ -86,11 +87,10 @@ for review when the SOP is next revised.
 
 ## Resources
 
-| URI | Name | MIME Type | Description |
-|-----|------|----------|-------------|
-| `sop://code_review_process` | code_review_process | text/markdown | This SOP defines the standard process for conducting code reviews to ensure code |
-| `sop://employee_onboarding_setup` | employee_onboarding_setup | text/markdown | This SOP defines the steps for onboarding a new employee, covering the initial s |
-| `sop://sop_creation_guide` | sop_creation_guide | text/markdown | Step-by-step guide for creating SOPs using RFC 2119 requirement levels. SOPs are |
-| `sop://sop_creation_guide/validate_sop.py` | sop_creation_guide/validate_sop.py | text/x-python | Attachment 'validate_sop.py' for SOP 'sop_creation_guide' |
-| `sop://user_onboarding_process` | user_onboarding_process | text/markdown | This SOP defines the standard process for onboarding new users to the organizati |
-
+| URI | Description |
+|-----|-------------|
+| `sop://code_review_process` | This SOP defines the standard process for conducting code reviews to ensure code quality, consistenc |
+| `sop://employee_onboarding_setup` | This SOP defines the steps for onboarding a new employee, covering the initial setup tasks: obtainin |
+| `sop://sop_creation_guide` | Step-by-step guide for creating SOPs using RFC 2119 requirement levels. SOPs are delivered one step  |
+| `sop://sop_creation_guide/validate_sop.py` | Attachment 'validate_sop.py' for SOP 'sop_creation_guide' |
+| `sop://user_onboarding_process` | This SOP defines the standard process for onboarding new users to the organization's systems and too |
