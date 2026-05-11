@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.1](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.10.0...v0.10.1) (2026-05-11)
+
+
+### Bug Fixes
+
+* **sop:** Add optional References section to SOP template ([c30127e](https://github.com/ValueArchitectsAI/sop-mcp/commit/c30127e6913e47939356e2661c7f3b9cd2cc5a47))
+* **sop:** Add optional References section to SOP template ([#88](https://github.com/ValueArchitectsAI/sop-mcp/issues/88)) ([18a841d](https://github.com/ValueArchitectsAI/sop-mcp/commit/18a841df554b059ce2a1bcd260f6c3e762c25af2))
+
 ## [0.10.0](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.9.4...v0.10.0) (2026-05-05)
 
 
