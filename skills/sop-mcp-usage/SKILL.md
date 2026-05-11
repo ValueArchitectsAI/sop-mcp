@@ -103,6 +103,17 @@ What this SOP accomplishes.
 **Time Estimate**: 10-15 minutes
 ```
 
+### Optional: Read-only References section
+
+After all steps, you may add a `## References` section linking to source material (standards, design docs, wikis). It's served by `read_resource` so humans can trace provenance, but `run_sop` skips it — the executing agent only sees `Overview` plus the current step.
+
+```markdown
+## References
+
+- [RFC 2119 — Key words for use in RFCs](https://www.rfc-editor.org/rfc/rfc2119)
+- [Internal design doc](https://wiki.example.com/design)
+```
+
 ---
 
 ## Tools Reference

@@ -152,6 +152,11 @@ def _validate_overview(body: str, errors: list[str]) -> None:
 # Sections that are delivered to the agent (visible at runtime)
 _RELEVANT_SECTIONS = {"Overview", "Steps", "Procedure"}
 
+# Sections that are intentionally read-only metadata — included when the SOP
+# is fetched via read_resource but deliberately excluded from run_sop output.
+# Adding one of these does NOT trigger a "not shown to agent" warning.
+_READ_ONLY_SECTIONS = {"References"}
+
 # Sections that are never shown to the executing agent
 _IRRELEVANT_PATTERN = re.compile(r"^##\s+(.+)$", re.MULTILINE)
 
@@ -159,12 +164,15 @@ _IRRELEVANT_PATTERN = re.compile(r"^##\s+(.+)$", re.MULTILINE)
 def _validate_extra_sections(body: str, warnings: list[str]) -> None:
     """Warn about sections that won't be shown to the agent at runtime.
 
-    Only Overview and Steps/Procedure matter — everything else (Prerequisites,
-    Scope, Definitions, References, etc.) is invisible to the agent during
-    step-by-step execution.
+    Only Overview and Steps/Procedure are delivered by run_sop. Other sections
+    (Prerequisites, Scope, Definitions, etc.) are invisible to the agent
+    during step-by-step execution — usually a mistake worth surfacing.
+
+    Exception: sections in _READ_ONLY_SECTIONS (e.g. References) are
+    intentionally read-only metadata and do not trigger a warning.
     """
     all_h2 = _IRRELEVANT_PATTERN.findall(body)
-    extra = [s.strip() for s in all_h2 if s.strip() not in _RELEVANT_SECTIONS]
+    extra = [s.strip() for s in all_h2 if s.strip() not in _RELEVANT_SECTIONS and s.strip() not in _READ_ONLY_SECTIONS]
     if extra:
         warnings.append(
             f"Sections not shown to agent during execution (consider moving content into steps): {', '.join(extra)}"
