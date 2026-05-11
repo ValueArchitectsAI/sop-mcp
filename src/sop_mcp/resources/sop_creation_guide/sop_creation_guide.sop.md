@@ -42,10 +42,11 @@ Step-by-step guide for creating SOPs using RFC 2119 requirement levels. SOPs are
 
 **Actions**:
 1. Create the document header:
-   - `# title`, `## Document Information` (Document ID, Version), `## Overview`, 
+   - `# title`, `## Document Information` (Document ID, Version), `## Overview`,
 2. Break the process into sequential steps using `### Step N: Title`
 3. For each step include: Objective, Actions, Requirements (using RFC 2119), Expected Output, Time Estimate
 4. Add a final feedback step using `submit_sop_feedback`
+5. (Optional) Add a `## References` section at the end linking to source documents, standards, or related material the SOP draws from. This section is served via `read_resource` but is deliberately NOT delivered by `run_sop` — treat it as read-only metadata for humans reviewing the SOP.
 
 **Requirements**:
 - You MUST use `### Step N:` heading syntax for each step
@@ -59,6 +60,7 @@ Step-by-step guide for creating SOPs using RFC 2119 requirement levels. SOPs are
 - You SHOULD keep 3-7 requirements per step
 - You SHOULD group requirements: MUST first, then SHOULD, then MAY
 - You SHOULD include time estimates per step
+- You MAY add a `## References` section for source links and related material — it's read-only context, not part of execution
 
 **Step writing principles**:
 - Each step = one action or closely related actions
@@ -66,7 +68,7 @@ Step-by-step guide for creating SOPs using RFC 2119 requirement levels. SOPs are
 - Specify formats when relevant (dates as YYYY-MM-DD, status as VALID/EXPIRED/PENDING)
 - Allow flexibility — guide the output without being overly prescriptive
 
-**Expected Output**: A complete SOP markdown document with frontmatter, Overview, and sequential steps — each step containing Objective, Actions, Requirements (RFC 2119), Expected Output, and Time Estimate.
+**Expected Output**: A complete SOP markdown document with frontmatter, Overview, and sequential steps — each step containing Objective, Actions, Requirements (RFC 2119), Expected Output, and Time Estimate. Optionally, a trailing `## References` section with links to source documents.
 
 **Time Estimate**: 1-3 hours
 
@@ -145,3 +147,12 @@ Step-by-step guide for creating SOPs using RFC 2119 requirement levels. SOPs are
 **Expected Output**: Feedback submitted via `submit_sop_feedback` tool with specific observations on what worked and what needs improvement.
 
 **Time Estimate**: 5-10 minutes
+
+## References
+
+The `## References` section is an optional, read-only metadata block for linking source material an SOP draws from — standards, design docs, wikis, related SOPs. It appears in the file when an SOP is fetched via `read_resource`, but `run_sop` deliberately skips it so the executing agent only sees `Overview` + the current `### Step N:`.
+
+Use it for citations like:
+
+- [RFC 2119 — Key words for use in RFCs](https://www.rfc-editor.org/rfc/rfc2119)
+- [Agent SOPs — standardized markdown format for agent workflows](https://github.com/strands-agents/agent-sop)
