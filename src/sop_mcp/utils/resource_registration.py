@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import logging
 import mimetypes
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from .storage import LocalFilesystemBackend
@@ -29,6 +31,12 @@ _TEXT_MIME_TYPES = {
     "image/svg+xml",
 }
 
+# Priority weights applied to the MCP ``annotations.priority`` field. The
+# spec defines the range as 0.0 (least important) → 1.0 (most important).
+# Production SOPs rank higher so clients that auto-include high-priority
+# resources pick the battle-tested versions first.
+_STAGE_PRIORITY = {"prod": 0.8, "preprod": 0.4}
+
 
 def _is_text_mime(mime: str) -> bool:
     if mime.startswith(_TEXT_MIME_PREFIXES):
@@ -39,6 +47,63 @@ def _is_text_mime(mime: str) -> bool:
 def _guess_mime(path: str) -> str:
     mime, _ = mimetypes.guess_type(path)
     return mime or "application/octet-stream"
+
+
+def _file_size(path: Path | None) -> int | None:
+    """Return the byte size of a file on disk, or ``None`` if unavailable."""
+    if path is None:
+        return None
+    try:
+        return path.stat().st_size
+    except OSError:
+        return None
+
+
+def _file_mtime_iso(path: Path | None) -> str | None:
+    """Return the file's last-modified time as an ISO 8601 UTC string."""
+    if path is None:
+        return None
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return None
+    # Trim microseconds and stamp with Z for the canonical UTC form the
+    # MCP spec shows in its examples.
+    return datetime.fromtimestamp(mtime, tz=UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _sop_annotations(sop: Any, path: Path | None) -> dict[str, Any]:
+    """Compose MCP ``annotations`` for an SOP resource.
+
+    - ``audience``: SOPs are agent-executed playbooks — flag them for the
+      assistant audience so hosts know to feed them to the model rather
+      than surface them in a user-facing browser by default.
+    - ``priority``: derived from the SOP stage; prod > preprod.
+    - ``lastModified``: file mtime when available.
+    """
+    annotations: dict[str, Any] = {"audience": ["assistant"]}
+    stage = getattr(sop, "stage", None)
+    if stage in _STAGE_PRIORITY:
+        annotations["priority"] = _STAGE_PRIORITY[stage]
+    mtime = _file_mtime_iso(path)
+    if mtime:
+        annotations["lastModified"] = mtime
+    return annotations
+
+
+def _attachment_annotations(path: Path | None) -> dict[str, Any]:
+    """Annotations for sidecar attachments.
+
+    Attachments are typically reference material (diagrams, checklists)
+    a human reviewer might consult — mark both audiences so hosts don't
+    hide them from users by default. Attachments inherit no priority;
+    the client can fall back to their parent SOP's priority.
+    """
+    annotations: dict[str, Any] = {"audience": ["user", "assistant"]}
+    mtime = _file_mtime_iso(path)
+    if mtime:
+        annotations["lastModified"] = mtime
+    return annotations
 
 
 # ---------------------------------------------------------------------------
@@ -90,12 +155,18 @@ def _clear_sop_resources(mcp: Any) -> None:
 def _register_sop(mcp: Any, backend: Any, sop_name: str, sop: Any) -> None:
     """Register a single SOP and its attachments as MCP resources."""
     description = _build_description(sop)
+    sop_path = backend.sop_path_for(sop_name)
 
     mcp.resource(
         f"{SOP_URI_SCHEME}{sop_name}",
         name=sop_name,
         description=description,
         mime_type="text/markdown",
+        meta={
+            "title": getattr(sop, "title", None) or None,
+            "size": _file_size(sop_path),
+            "annotations": _sop_annotations(sop, sop_path),
+        },
     )(_make_sop_reader(backend, sop_name))
 
     _register_attachments(mcp, backend, sop_name)
@@ -133,12 +204,21 @@ def _register_attachments(mcp: Any, backend: Any, sop_name: str) -> None:
         is_binary = not _is_text_mime(mime)
         uri = f"{SOP_URI_SCHEME}{sop_name}/{rel_path}"
 
+        attachment_path: Path | None = None
+        path_lookup = getattr(backend, "attachment_path_for", None)
+        if callable(path_lookup):
+            attachment_path = path_lookup(sop_name, rel_path)
+
         mcp.resource(
             uri,
             name=f"{sop_name}/{rel_path}",
             description=f"Attachment '{rel_path}' for SOP '{sop_name}'",
             mime_type=mime,
             is_binary=is_binary,
+            meta={
+                "size": _file_size(attachment_path),
+                "annotations": _attachment_annotations(attachment_path),
+            },
         )(_make_attachment_reader(backend, sop_name, rel_path, is_binary))
 
 
