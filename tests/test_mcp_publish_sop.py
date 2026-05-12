@@ -20,7 +20,7 @@ from fastmcp import Client
 # ---------------------------------------------------------------------------
 
 
-def _sop_content(name: str, overview: str = "Overview text.") -> str:
+def _sop_content(name: str, overview: str = "Spec-compliant test overview.") -> str:
     return (
         "---\n"
         f"name: {name}\n"
@@ -30,8 +30,14 @@ def _sop_content(name: str, overview: str = "Overview text.") -> str:
         "---\n\n"
         f"# Test SOP: {name}\n\n"
         f"## Overview\n\n{overview}\n\n"
-        "### Step 1: Do the thing\n\n"
-        "Perform the action. **Time Estimate:** 1 minute\n"
+        "## Parameters\n\n- **input_data** (required): The input to process.\n\n"
+        "## Steps\n\n"
+        "### 1. Do the thing\n\n"
+        "Perform the primary action this SOP exists for.\n\n"
+        "**Constraints:**\n"
+        "- You MUST complete the action\n"
+        "- You SHOULD log progress\n\n"
+        "**Expected Output:** The action's result payload.\n"
     )
 
 
@@ -53,19 +59,19 @@ async def test_publish_returns_success(mcp_transport):
 async def test_publish_registers_resource(mcp_transport):
     """Published SOP becomes discoverable via list_resources."""
     async with Client(mcp_transport) as client:
-        await client.call_tool("publish_sop", {"content": _sop_content("resource_sop"), "stage": "preprod"})
+        await client.call_tool("publish_sop", {"content": _sop_content("test_resource_sop"), "stage": "preprod"})
         resources = await client.list_resources()
         uris = [str(r.uri) for r in resources]
-        assert "sop://resource_sop" in uris
+        assert "sop://test_resource_sop" in uris
 
 
 async def test_publish_sop_is_runnable(mcp_transport):
     """Published SOP can be executed via run_sop."""
     async with Client(mcp_transport) as client:
-        await client.call_tool("publish_sop", {"content": _sop_content("runnable_sop"), "stage": "preprod"})
-        result = await client.call_tool("run_sop", {"sop_name": "runnable_sop"})
+        await client.call_tool("publish_sop", {"content": _sop_content("test_runnable_sop"), "stage": "preprod"})
+        result = await client.call_tool("run_sop", {"sop_name": "test_runnable_sop"})
         data = json.loads(result.content[0].text)
-        assert data["sop_name"] == "runnable_sop"
+        assert data["sop_name"] == "test_runnable_sop"
         assert data["total_steps"] == 1
 
 
@@ -77,8 +83,8 @@ async def test_publish_sop_is_runnable(mcp_transport):
 async def test_republish_bumps_version(mcp_transport):
     """Publishing the same SOP name twice increments the version."""
     async with Client(mcp_transport) as client:
-        r1 = await client.call_tool("publish_sop", {"content": _sop_content("bump_sop"), "stage": "preprod"})
-        r2 = await client.call_tool("publish_sop", {"content": _sop_content("bump_sop"), "stage": "preprod"})
+        r1 = await client.call_tool("publish_sop", {"content": _sop_content("test_bump_sop"), "stage": "preprod"})
+        r2 = await client.call_tool("publish_sop", {"content": _sop_content("test_bump_sop"), "stage": "preprod"})
         assert json.loads(r1.content[0].text)["version"] == 1
         assert json.loads(r2.content[0].text)["version"] == 2
 
@@ -86,8 +92,8 @@ async def test_republish_bumps_version(mcp_transport):
 async def test_republish_updates_in_place(mcp_transport):
     """Re-publishing the same name updates the existing file, not creates a new one."""
     async with Client(mcp_transport) as client:
-        r1 = await client.call_tool("publish_sop", {"content": _sop_content("update_sop"), "stage": "preprod"})
-        r2 = await client.call_tool("publish_sop", {"content": _sop_content("update_sop"), "stage": "preprod"})
+        r1 = await client.call_tool("publish_sop", {"content": _sop_content("test_update_sop"), "stage": "preprod"})
+        r2 = await client.call_tool("publish_sop", {"content": _sop_content("test_update_sop"), "stage": "preprod"})
         d1 = json.loads(r1.content[0].text)
         d2 = json.loads(r2.content[0].text)
         assert d1["path"] == d2["path"], "Same file should be updated in place"
@@ -120,7 +126,15 @@ async def test_publish_rejects_missing_owner(mcp_transport):
         "version: 1\n"
         "stage: preprod\n"
         "---\n\n"
-        "# No Owner\n\n## Overview\n\nTest.\n\n### Step 1: Do\n\nAction.\n"
+        "# No Owner\n\n"
+        "## Overview\n\nTest fixture.\n\n"
+        "## Parameters\n\n- **x** (required): x.\n\n"
+        "## Steps\n\n"
+        "### 1. Do\n\n"
+        "Action.\n\n"
+        "**Constraints:**\n"
+        "- You MUST act\n\n"
+        "**Expected Output:** Action completed.\n"
     )
     async with Client(mcp_transport) as client:
         with pytest.raises(ToolError, match="owner"):

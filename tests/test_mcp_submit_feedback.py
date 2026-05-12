@@ -52,7 +52,9 @@ async def test_submit_feedback_includes_version(mcp_transport):
             {"sop_name": "sop_creation_guide", "feedback": "Version check."},
         )
         data = json.loads(result.content[0].text)
-        assert data["sop_version"] == 1
+        # sop_creation_guide was bumped to v2 during the agent-sop format
+        # migration; any positive integer version is fine.
+        assert data["sop_version"] >= 1
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +108,13 @@ async def test_feedback_on_freshly_published_sop(mcp_transport):
         "---\n\n"
         "# Feedback Target\n\n"
         "## Overview\n\nTarget for feedback.\n\n"
-        "### Step 1: Do\n\nAction. **Time Estimate:** 1 minute\n"
+        "## Parameters\n\n- **x** (required): x.\n\n"
+        "## Steps\n\n"
+        "### 1. Do\n\n"
+        "Action body.\n\n"
+        "**Constraints:**\n"
+        "- You MUST act\n\n"
+        "**Expected Output:** Action completed.\n"
     )
     async with Client(mcp_transport) as client:
         pub = await client.call_tool("publish_sop", {"content": content, "stage": "preprod"})

@@ -80,7 +80,7 @@ async def test_read_resource_returns_sop_content(mcp_transport):
     async with Client(mcp_transport) as client:
         content = await client.read_resource("sop://sop_creation_guide")
         text = str(content)
-        assert "Step 1" in text
+        assert "### 1." in text
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +102,7 @@ async def test_read_resource_tool_returns_content(mcp_transport):
     async with Client(mcp_transport) as client:
         result = await client.call_tool("read_resource", {"uri": "sop://sop_creation_guide"})
         data = json.loads(result.content[0].text)
-        assert "Step 1" in data["content"]
+        assert "### 1." in data["content"]
 
 
 async def test_read_resource_tool_unknown_uri_errors(mcp_transport):
@@ -131,8 +131,14 @@ async def test_feedback_not_listed_as_resource(mcp_transport):
             "stage: preprod\n"
             "---\n\n"
             "# Hidden FB\n\n"
-            "## Overview\n\nTest.\n\n"
-            "### Step 1: Do\n\nAction. **Time Estimate:** 1 minute\n"
+            "## Overview\n\nTest fixture for resource listing.\n\n"
+            "## Parameters\n\n- **x** (required): x.\n\n"
+            "## Steps\n\n"
+            "### 1. Do\n\n"
+            "Action body.\n\n"
+            "**Constraints:**\n"
+            "- You MUST act\n\n"
+            "**Expected Output:** Action completed.\n"
         )
         await client.call_tool("publish_sop", {"content": content, "stage": "preprod"})
         await client.call_tool(

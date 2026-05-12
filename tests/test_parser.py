@@ -38,7 +38,7 @@ class TestSopOverviewExtraction:
 
     def test_overview_contains_expected_content(self):
         sop = SOP("sop_creation_guide")
-        assert "RFC 2119" in sop.overview
+        assert "agent-sop" in sop.overview
 
 
 class TestSopStepExtraction:
@@ -47,7 +47,7 @@ class TestSopStepExtraction:
     def test_extracts_all_steps(self):
         sop = SOP("sop_creation_guide")
         assert isinstance(sop.steps, list)
-        assert len(sop.steps) == 5
+        assert len(sop.steps) == 6
 
     def test_steps_are_strings(self):
         sop = SOP("sop_creation_guide")
@@ -57,9 +57,10 @@ class TestSopStepExtraction:
 
     def test_steps_contain_step_headings(self):
         sop = SOP("sop_creation_guide")
-        assert "Step 1:" in sop.steps[0]
-        assert "Step 2:" in sop.steps[1]
-        assert "Step 5:" in sop.steps[4]
+        # New agent-sop spec format: `### N. Step Name`
+        assert "1. " in sop.steps[0]
+        assert "2. " in sop.steps[1]
+        assert "6. " in sop.steps[5]
 
     def test_first_step_is_gather_process_information(self):
         sop = SOP("sop_creation_guide")
@@ -67,7 +68,7 @@ class TestSopStepExtraction:
 
     def test_total_steps_property(self):
         sop = SOP("sop_creation_guide")
-        assert sop.total_steps == 5
+        assert sop.total_steps == 6
 
 
 class TestSopProperties:
@@ -104,7 +105,7 @@ class TestSopFromContent:
             "---\n\n"
             "# Test SOP\n\n"
             "## Overview\n\nThis is a test SOP.\n\n"
-            "### Step 1: Do something\n\nDo the thing.\n"
+            "### 1. Do something\n\nDo the thing.\n"
         )
         sop = SOP.from_content(content)
         assert sop.name == "my_test_sop"
@@ -113,7 +114,7 @@ class TestSopFromContent:
         assert sop.path is None
 
     def test_raises_for_missing_sop_name(self):
-        content = "# Some Title\n\n## Overview\n\nHello\n\n### Step 1: Do\n\nStuff\n"
+        content = "# Some Title\n\n## Overview\n\nHello\n\n### 1. Do\n\nStuff\n"
         with pytest.raises(ValueError, match="Could not extract SOP name"):
             SOP.from_content(content)
 
@@ -127,7 +128,7 @@ class TestSopFromContent:
             "---\n\n"
             "no heading\n\n"
             "## Overview\n\nHello\n\n"
-            "### Step 1: Do\n\nStuff\n"
+            "### 1. Do\n\nStuff\n"
         )
         with pytest.raises(ValueError, match="missing a title"):
             SOP.from_content(content)
