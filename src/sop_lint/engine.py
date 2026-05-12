@@ -495,44 +495,99 @@ class FileHasSopMdExtension:
             )
 
 
-class ParameterNamesAreSnakeCase:
-    """SOP107 — parameter names use lowercase snake_case.
+class ParameterSchema:
+    """SOP109 — parameters under ``## Parameters`` follow the spec schema.
 
-    Parses the ``## Parameters`` section for ``- **name**`` entries and
-    checks each name against the spec's requirement:
+    The Agent SOP format specification defines parameter lines as::
 
-      "Parameter names MUST: Use lowercase letters; Use underscores
-       for spaces (snake_case); Be descriptive of their purpose."
+        - **name** (required): description
+        - **name** (optional): description
+        - **name** (optional, default: value): description
+
+    This rule fires once per malformed bullet with a message listing
+    every aspect of the schema the bullet violates (missing snake_case
+    name, missing required/optional tag, missing description, etc.).
+    Fires only when ``## Parameters`` has at least one bullet; an empty
+    or absent Parameters section is handled by SOP103.
+
+    Merged what used to be SOP107's snake_case name check so authors
+    see one holistic parameter-schema message instead of two separate
+    warnings for the same bullet.
     """
 
-    code = "SOP107"
+    code = "SOP109"
     default_severity = Severity.WARNING
-    _param_pattern = re.compile(r"^\s*-\s*\*\*([^*]+)\*\*", re.MULTILINE)
+
+    _bullet_pattern = re.compile(r"^\s*-\s+(.+)$", re.MULTILINE)
+    _full_pattern = re.compile(
+        r"^\*\*(?P<name>[^*]+)\*\*\s*"
+        r"\((?P<kind>required|optional)(?:\s*,\s*default:\s*[^)]+)?\)"
+        r"\s*:\s*(?P<description>\S.*)$"
+    )
+    _name_only_pattern = re.compile(r"^\*\*(?P<name>[^*]+)\*\*")
     _snake_case_pattern = re.compile(r"^[a-z][a-z0-9_]*$")
 
     def check(self, doc: SopDocument) -> Iterable[Diagnostic]:
         if doc.parameters is None:
             return
-        # Find the Parameters section line offset so we can produce
-        # accurate line numbers.
         section_line = next(
             (line for heading, line in doc.top_level_sections if heading == "Parameters"),
             doc.body_line_offset,
         )
-        for match in self._param_pattern.finditer(doc.parameters):
-            name = match.group(1).strip()
-            # Relative line inside the Parameters section.
-            rel_line = doc.parameters[: match.start()].count("\n")
-            line = section_line + rel_line + 1  # +1 because section_line is the `## Parameters` line itself
-            if not self._snake_case_pattern.match(name):
+        for bullet_match in self._bullet_pattern.finditer(doc.parameters):
+            bullet = bullet_match.group(1).strip()
+            rel_line = doc.parameters[: bullet_match.start()].count("\n")
+            # +1 because section_line is the `## Parameters` heading
+            # itself; bullets live on subsequent lines.
+            line = section_line + rel_line + 1
+
+            problems = self._classify(bullet)
+            if problems:
+                preview = bullet if len(bullet) <= 80 else bullet[:77] + "..."
                 yield Diagnostic(
                     code=self.code,
                     severity=self.default_severity,
                     line=line,
                     message=(
-                        f"Parameter `{name}` is not snake_case. Names MUST be lowercase with underscores for spaces."
+                        f"Parameter `- {preview}` does not follow the schema "
+                        f"`- **name** (required|optional[, default: value]): description`. "
+                        f"Issues: {', '.join(problems)}."
                     ),
                 )
+
+    def _classify(self, bullet: str) -> list[str]:
+        """Return a list of human-readable problem descriptions."""
+        if self._full_pattern.match(bullet):
+            name = self._full_pattern.match(bullet).group("name").strip()
+            if not self._snake_case_pattern.match(name):
+                return [f"name `{name}` is not snake_case"]
+            return []
+
+        problems: list[str] = []
+
+        # Name present and snake_case?
+        name_match = self._name_only_pattern.match(bullet)
+        if not name_match:
+            problems.append("missing `**name**` prefix")
+        else:
+            name = name_match.group("name").strip()
+            if not self._snake_case_pattern.match(name):
+                problems.append(f"name `{name}` is not snake_case")
+
+        # (required) / (optional) tag present?
+        if not re.search(r"\((?:required|optional)(?:\s*,\s*default:\s*[^)]+)?\)", bullet):
+            problems.append("missing `(required)` or `(optional)` tag")
+
+        # Description after colon?
+        colon_idx = bullet.find(":")
+        if colon_idx < 0:
+            problems.append("missing `: description` after the tag")
+        else:
+            desc = bullet[colon_idx + 1 :].strip()
+            if not desc:
+                problems.append("description after `:` is empty")
+
+        return problems or ["does not match the canonical parameter syntax"]
 
 
 class OverviewIsSimple:
@@ -1042,7 +1097,7 @@ BUILTIN_RULES: tuple[Rule, ...] = (
     DocumentHasSteps(),
     StepsAreSequential(),
     FileHasSopMdExtension(),
-    ParameterNamesAreSnakeCase(),
+    ParameterSchema(),
     OverviewIsSimple(),
     # Per-step content (2xx)
     StepHasDescription(),

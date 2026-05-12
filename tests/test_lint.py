@@ -178,18 +178,39 @@ class TestSOP106SopMdExtension:
         assert "SOP106" not in codes(lint(build_sop()))
 
 
-class TestSOP107ParameterSnakeCase:
-    def test_camelcase_fires(self):
+class TestSOP109ParameterSchema:
+    def test_camelcase_name_fires(self):
         params = "## Parameters\n\n- **camelCase** (required): Bad naming."
-        assert "SOP107" in codes(lint(build_sop(parameters=params)))
+        result = lint(build_sop(parameters=params))
+        assert "SOP109" in codes(result)
+        diag = next(d for d in result.diagnostics if d.code == "SOP109")
+        assert "snake_case" in diag.message
 
-    def test_dash_fires(self):
+    def test_dash_name_fires(self):
         params = "## Parameters\n\n- **with-dash** (required): Also bad."
-        assert "SOP107" in codes(lint(build_sop(parameters=params)))
+        assert "SOP109" in codes(lint(build_sop(parameters=params)))
 
-    def test_snake_case_passes(self):
-        params = "## Parameters\n\n- **valid_name** (required): Good."
-        assert "SOP107" not in codes(lint(build_sop(parameters=params)))
+    def test_missing_required_optional_tag_fires(self):
+        params = "## Parameters\n\n- **valid_name**: description only, no tag."
+        result = lint(build_sop(parameters=params))
+        assert "SOP109" in codes(result)
+        diag = next(d for d in result.diagnostics if d.code == "SOP109")
+        assert "required" in diag.message.lower() or "optional" in diag.message.lower()
+
+    def test_missing_description_fires(self):
+        params = "## Parameters\n\n- **valid_name** (required):"
+        result = lint(build_sop(parameters=params))
+        assert "SOP109" in codes(result)
+        diag = next(d for d in result.diagnostics if d.code == "SOP109")
+        assert "description" in diag.message.lower()
+
+    def test_full_schema_passes(self):
+        params = "## Parameters\n\n- **valid_name** (required): Good description."
+        assert "SOP109" not in codes(lint(build_sop(parameters=params)))
+
+    def test_optional_with_default_passes(self):
+        params = "## Parameters\n\n- **valid_name** (optional, default: 42): Good description."
+        assert "SOP109" not in codes(lint(build_sop(parameters=params)))
 
 
 class TestSOP108OverviewIsSimple:

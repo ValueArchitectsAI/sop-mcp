@@ -43,7 +43,7 @@ VALID_SOP = (
 # SOPMCP003 (frontmatter name has <3 segments) → should exit 1
 INVALID_SOP_NAME = VALID_SOP.replace("cli_test_valid_sop", "bad_name")
 
-# SOP107 (param name not snake_case) alone → info/warning, should exit 2
+# SOP109 (param line doesn't match schema) alone → warning, should exit 2
 WARN_ONLY_SOP = VALID_SOP.replace(
     "- **input_data** (required): The input to process.",
     "- **badName** (required): Parameter with camelCase name.",
@@ -91,7 +91,7 @@ def test_error_exits_one(invalid_file: Path, capsys):
 def test_warning_exits_two(warn_only_file: Path, capsys):
     assert main([str(warn_only_file)]) == 2
     captured = capsys.readouterr()
-    assert "SOP107" in captured.out
+    assert "SOP109" in captured.out
 
 
 def test_missing_path_exits_three(tmp_path: Path, capsys):
@@ -159,8 +159,8 @@ def test_ignore_flag_silences_rule(invalid_file: Path, capsys):
 
 
 def test_select_flag_narrows_scope(warn_only_file: Path, capsys):
-    # `--select SOPMCP` enables only the frontmatter extras, excluding SOP107
-    # (the param-name warning fired by the warn-only fixture), so exit should be 0.
+    # `--select SOPMCP` enables only the frontmatter extras, excluding SOP109
+    # (the parameter-schema warning fired by the warn-only fixture), so exit should be 0.
     assert main([str(warn_only_file), "--select", "SOPMCP"]) == 0
 
 

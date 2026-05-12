@@ -70,6 +70,23 @@ async def test_resources_have_description(mcp_transport):
         assert len(sop.description) > 0
 
 
+async def test_resources_description_includes_parameters(mcp_transport):
+    """SOP resources expose the `## Parameters` block inside the MCP description.
+
+    The agent browses `resources/list` when deciding which SOP to read.
+    Serving the parameters alongside the overview lets the agent see
+    both "what this SOP does" and "what inputs it takes" without
+    opening the resource first.
+    """
+    async with Client(mcp_transport) as client:
+        resources = await client.list_resources()
+        sop = next(r for r in resources if str(r.uri) == "sop://sop_creation_guide")
+        assert "## Parameters" in sop.description
+        # sop_creation_guide declares process_name and process_owner.
+        assert "process_name" in sop.description
+        assert "process_owner" in sop.description
+
+
 # ---------------------------------------------------------------------------
 # Resource reading
 # ---------------------------------------------------------------------------
