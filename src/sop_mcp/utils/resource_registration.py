@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import mimetypes
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -75,7 +75,7 @@ def _file_mtime_iso(path: Path | None) -> str | None:
         return None
     # Trim microseconds and stamp with Z for the canonical UTC form the
     # MCP spec shows in its examples.
-    return datetime.fromtimestamp(mtime, tz=UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return datetime.fromtimestamp(mtime, tz=timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _sop_annotations(sop: Any, path: Path | None) -> dict[str, Any]:
