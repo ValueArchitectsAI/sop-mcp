@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.12.0](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.11.0...v0.12.0) (2026-05-12)
+
+
+### Features
+
+* **mcp:** upgrade to protocol 2025-06-18 with richer metadata, pagination, and correct error codes ([b150b71](https://github.com/ValueArchitectsAI/sop-mcp/commit/b150b71de24302642a22a7e1c2538521d8b79573))
+* **templates:** expose packaged SOP scaffolds under template:// ([e676f1b](https://github.com/ValueArchitectsAI/sop-mcp/commit/e676f1b1b24ac4d2e3daaa2029c7b30d1038233f))
+
+
+### Bug Fixes
+
+* replace datetime.UTC with timezone.utc for Python 3.10 compat ([56a770e](https://github.com/ValueArchitectsAI/sop-mcp/commit/56a770eac6d8a6deb6ff4ac9c1f9545e66f1f75d))
+
 ## [0.11.0](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.10.1...v0.11.0) (2026-05-12)
 
 
