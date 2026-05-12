@@ -46,6 +46,7 @@ dev = [
 
 [project.scripts]
 sop-mcp = "src.sop_mcp.server:run"
+sop-lint = "src.sop_lint.cli:main"
 
 [build-system]
 requires = ["hatchling"]
