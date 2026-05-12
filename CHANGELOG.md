@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.11.0](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.10.1...v0.11.0) (2026-05-12)
+
+
+### Features
+
+* **lint,mcp:** Enforce parameter schema with SOP109 and surface params in resource descriptions ([2443652](https://github.com/ValueArchitectsAI/sop-mcp/commit/244365265280b96b350aae2cf6e45d5a3f9d76ec))
+* **lint:** Add sop-lint rule engine and CLI ([5b37b79](https://github.com/ValueArchitectsAI/sop-mcp/commit/5b37b793671be11e5dbf351ee17c4675085064c1))
+* **mcp:** Wire sop-lint into publish_sop and update step-heading parser ([43e0f3a](https://github.com/ValueArchitectsAI/sop-mcp/commit/43e0f3a181804272409570de232afd23cb165f22))
+* **sops:** Migrate bundled example SOPs to Agent SOP spec format ([64e580b](https://github.com/ValueArchitectsAI/sop-mcp/commit/64e580ba80b6577a5f172496ea0470e38732f609))
+
 ## [0.10.1](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.10.0...v0.10.1) (2026-05-11)
 
 
