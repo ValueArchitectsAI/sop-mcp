@@ -23,3 +23,13 @@ repos:
         language: system
         pass_filenames: false
         files: ^(src/sop_mcp/.*\.py|scripts/generate_docs\.py)$
+
+      - id: sop-lint
+        name: SOP linter (self-check)
+        description: >-
+          Lint every bundled *.sop.md file using the local sop-lint CLI,
+          the same engine the MCP server runs on publish_sop.
+        entry: uv run sop-lint
+        language: system
+        types_or: [markdown]
+        files: \.sop\.md$

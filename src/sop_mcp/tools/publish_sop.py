@@ -3,6 +3,7 @@
 import logging
 from typing import Annotated, Any
 
+from src.sop_lint.engine import lint, load_config
 from src.sop_mcp.utils import SOP, register_sop_resources, set_version_in_content
 from src.sop_mcp.utils.sop_parser import _normalise_stage, _split_frontmatter
 from src.sop_mcp.utils.storage import LocalFilesystemBackend
@@ -42,7 +43,12 @@ DESCRIPTION = (
     "# My SOP\\n\\n## Overview\\nOverview text.\\n\\n"
     '### Step 1: First step\\nDo the thing."}\n\n'
     "Versioning: plain positive integers — 1, 2, 3, 4, … New SOPs start at 1; "
-    "each subsequent publish increments by one. No semver."
+    "each subsequent publish increments by one. No semver.\n\n"
+    "Lint enforcement: every publish runs the same rule engine as the standalone "
+    "`sop-lint` CLI. Errors (SOP rules at severity=error) BLOCK the publish — "
+    "the tool raises and nothing is written. Warnings are returned under the "
+    "`warning` field but do not block. Iterate locally with `sop-lint <file>` "
+    "before calling publish_sop to avoid MCP round-trip latency."
 )
 
 
@@ -136,6 +142,20 @@ def handler(
     if not sop.owner:
         raise ValueError("Frontmatter `owner` is required and must be a non-empty string.")
 
+    # Run the lint engine before writing. Errors block the publish so
+    # the agent is forced to fix the SOP; warnings flow through as
+    # informational response fields. The same engine is available
+    # standalone via the `sop-lint` CLI — which agents should use for
+    # iterative linting since it avoids MCP round-trip latency.
+    lint_config = load_config(backend.base_dir)
+    lint_result = lint(content, config=lint_config)
+    if lint_result.has_errors:
+        error_lines = [f"  - {d.code} (line {d.line}): {d.message}" for d in lint_result.errors]
+        raise ValueError(
+            "SOP failed lint checks. Iterate with the `sop-lint` CLI, or fix the errors below:\n"
+            + "\n".join(error_lines)
+        )
+
     # Capture what the author declared before we overwrite it — these feed
     # the mismatch warnings so the author can tell whether they were editing
     # the file they thought they were.
@@ -173,6 +193,12 @@ def handler(
         final_stage=sop.stage,
         owner=sop.owner,
     )
+    # Re-lint the canonicalised content so the response surfaces lint
+    # warnings against what was actually stored (not what the author
+    # initially sent). Errors were caught above; only warnings remain.
+    post_lint = lint(content, config=lint_config)
+    for diag in post_lint.warnings:
+        warnings.append(f"{diag.code} (line {diag.line}): {diag.message}")
     if warnings:
         result["warning"] = " | ".join(warnings)
     return result

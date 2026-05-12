@@ -224,10 +224,11 @@ def _extract_overview(content: str) -> str:
 
 
 def _extract_steps(content: str) -> list[str]:
-    pattern = r"^(###\s+Step\s+\d+:\s+.+?)(?=^###\s+Step\s+\d+:|\Z)"
+    # Agent SOP spec: "### N. Step Name" — number, dot, space, name.
+    pattern = r"^(###\s+\d+\.\s+.+?)(?=^###\s+\d+\.\s|\Z)"
     matches = re.findall(pattern, content, re.MULTILINE | re.DOTALL)
     if not matches:
-        raise ValueError("SOP file has no steps (expected ### Step N: format)")
+        raise ValueError("SOP file has no steps (expected `### N. Step Name` format)")
     return [step.strip() for step in matches]
 
 
