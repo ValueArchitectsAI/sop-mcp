@@ -19,6 +19,12 @@ logger = logging.getLogger(__name__)
 
 
 SOP_URI_SCHEME = "sop://"
+TEMPLATE_URI_SCHEME = "template://"
+
+# Root of the packaged template directory. Kept outside the seeded
+# SOP catalog so ``template://`` resources are never confused with
+# user-authored SOPs.
+_TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 
 _TEXT_MIME_PREFIXES = ("text/",)
 _TEXT_MIME_TYPES = {
@@ -138,6 +144,21 @@ def _make_attachment_reader(backend: Any, name: str, rel: str, binary: bool) -> 
     return read
 
 
+def _make_file_reader(path: Path, label: str) -> callable:
+    """Create a reader that returns the UTF-8 contents of a packaged file.
+
+    Used for ``template://`` resources that ship with the package rather
+    than living in the user's SOP storage directory.
+    """
+
+    def read() -> str:
+        return path.read_text(encoding="utf-8")
+
+    read.__name__ = f"read_template_{label}".replace("/", "_").replace(".", "_").replace("-", "_")
+    read.__doc__ = f"Read packaged template '{label}'."
+    return read
+
+
 # ---------------------------------------------------------------------------
 # Registration helpers
 # ---------------------------------------------------------------------------
@@ -149,6 +170,15 @@ def _clear_sop_resources(mcp: Any) -> None:
     if isinstance(registry, dict):
         for uri in list(registry):
             if uri.startswith(SOP_URI_SCHEME):
+                registry.pop(uri, None)
+
+
+def _clear_template_resources(mcp: Any) -> None:
+    """Clear prior template:// registrations."""
+    registry = getattr(mcp, "_resources", None)
+    if isinstance(registry, dict):
+        for uri in list(registry):
+            if uri.startswith(TEMPLATE_URI_SCHEME):
                 registry.pop(uri, None)
 
 
@@ -282,3 +312,78 @@ def register_sop_resources(
         _emit_notifications(mcp)
 
     return warnings
+
+
+# ---------------------------------------------------------------------------
+# Template resources
+# ---------------------------------------------------------------------------
+
+
+def _template_annotations(path: Path) -> dict[str, Any]:
+    """Annotations for packaged template resources.
+
+    Templates are authoring aids: useful to both humans writing SOPs and
+    agents helping to draft them. Mark both audiences. Priority is kept
+    below a production SOP's (0.8) so auto-inclusion heuristics don't
+    favour the template over real playbooks.
+    """
+    annotations: dict[str, Any] = {
+        "audience": ["user", "assistant"],
+        "priority": 0.5,
+    }
+    mtime = _file_mtime_iso(path)
+    if mtime:
+        annotations["lastModified"] = mtime
+    return annotations
+
+
+def register_template_resources(mcp: Any, *, notify: bool = False) -> list[str]:
+    """Register every ``*.sop.md`` file under ``templates/`` as a template.
+
+    The URI is derived from the filename stem (minus the ``.sop`` suffix):
+    ``sop.sop.md`` → ``template://sop``. Dropping a new file into the
+    templates directory is enough to expose it — no registry update
+    required.
+
+    Returns the list of URIs registered so callers can log it.
+    """
+    _clear_template_resources(mcp)
+
+    if not _TEMPLATES_DIR.is_dir():
+        return []
+
+    registered: list[str] = []
+    for path in sorted(_TEMPLATES_DIR.glob("*.sop.md")):
+        # Strip both the ``.md`` and the ``.sop`` part to get the URI stem.
+        identifier = path.name.removesuffix(".sop.md")
+        uri = f"{TEMPLATE_URI_SCHEME}{identifier}"
+        # Short stems (≤3 chars) are almost always acronyms — "sop",
+        # "api", "cdk" — so keep them uppercase. Longer stems are
+        # human-readable words; title-case them with separators
+        # normalised to spaces.
+        display = identifier.upper() if len(identifier) <= 3 else identifier.replace("-", " ").replace("_", " ").title()
+        title = f"{display} Template"
+        description = (
+            f"Lint-clean scaffold for authoring a new {display}. Every section is a "
+            "TODO placeholder that already satisfies the sop-lint rules — copy the "
+            "body, replace each TODO, and the result will lint clean without "
+            "structural fixes."
+        )
+
+        mcp.resource(
+            uri,
+            name=identifier,
+            description=description,
+            mime_type="text/markdown",
+            meta={
+                "title": title,
+                "size": _file_size(path),
+                "annotations": _template_annotations(path),
+            },
+        )(_make_file_reader(path, identifier))
+        registered.append(uri)
+
+    if notify:
+        _emit_notifications(mcp)
+
+    return registered

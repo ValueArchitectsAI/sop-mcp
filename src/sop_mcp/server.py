@@ -10,7 +10,7 @@ import os
 
 from src.sop_mcp.hooks import HookExecutor, install_hooks
 from src.sop_mcp.tools import publish_sop, run_sop, submit_sop_feedback
-from src.sop_mcp.utils import register_sop_resources
+from src.sop_mcp.utils import register_sop_resources, register_template_resources
 from src.sop_mcp.utils.stdiomcp import StdioMCP
 from src.sop_mcp.utils.storage import LocalFilesystemBackend
 
@@ -74,6 +74,9 @@ for _mod in (run_sop, publish_sop, submit_sop_feedback):
 
 # Register SOP resources for discoverability
 register_sop_resources(mcp)
+
+# Register packaged template resources (reference exemplars, not user SOPs)
+register_template_resources(mcp)
 
 # Install hook system (no-op if SOP_HOOK_CONFIG not set)
 install_hooks(mcp, _init_hooks())

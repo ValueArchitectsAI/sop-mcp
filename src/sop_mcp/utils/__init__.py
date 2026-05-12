@@ -1,6 +1,6 @@
 """Utility modules for SOP MCP Server."""
 
-from .resource_registration import register_sop_resources
+from .resource_registration import register_sop_resources, register_template_resources
 from .sop_parser import (
     SOP,
     SOP_SUFFIX,
@@ -23,5 +23,6 @@ __all__ = [
     "get_version",
     "list_available_sops",
     "register_sop_resources",
+    "register_template_resources",
     "set_version_in_content",
 ]
