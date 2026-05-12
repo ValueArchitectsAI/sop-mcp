@@ -70,6 +70,23 @@ async def test_resources_have_description(mcp_transport):
         assert len(sop.description) > 0
 
 
+async def test_resources_description_includes_parameters(mcp_transport):
+    """SOP resources expose the `## Parameters` block inside the MCP description.
+
+    The agent browses `resources/list` when deciding which SOP to read.
+    Serving the parameters alongside the overview lets the agent see
+    both "what this SOP does" and "what inputs it takes" without
+    opening the resource first.
+    """
+    async with Client(mcp_transport) as client:
+        resources = await client.list_resources()
+        sop = next(r for r in resources if str(r.uri) == "sop://sop_creation_guide")
+        assert "## Parameters" in sop.description
+        # sop_creation_guide declares process_name and process_owner.
+        assert "process_name" in sop.description
+        assert "process_owner" in sop.description
+
+
 # ---------------------------------------------------------------------------
 # Resource reading
 # ---------------------------------------------------------------------------
@@ -80,7 +97,7 @@ async def test_read_resource_returns_sop_content(mcp_transport):
     async with Client(mcp_transport) as client:
         content = await client.read_resource("sop://sop_creation_guide")
         text = str(content)
-        assert "Step 1" in text
+        assert "### 1." in text
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +119,7 @@ async def test_read_resource_tool_returns_content(mcp_transport):
     async with Client(mcp_transport) as client:
         result = await client.call_tool("read_resource", {"uri": "sop://sop_creation_guide"})
         data = json.loads(result.content[0].text)
-        assert "Step 1" in data["content"]
+        assert "### 1." in data["content"]
 
 
 async def test_read_resource_tool_unknown_uri_errors(mcp_transport):
@@ -131,8 +148,14 @@ async def test_feedback_not_listed_as_resource(mcp_transport):
             "stage: preprod\n"
             "---\n\n"
             "# Hidden FB\n\n"
-            "## Overview\n\nTest.\n\n"
-            "### Step 1: Do\n\nAction. **Time Estimate:** 1 minute\n"
+            "## Overview\n\nTest fixture for resource listing.\n\n"
+            "## Parameters\n\n- **x** (required): x.\n\n"
+            "## Steps\n\n"
+            "### 1. Do\n\n"
+            "Action body.\n\n"
+            "**Constraints:**\n"
+            "- You MUST act\n\n"
+            "**Expected Output:** Action completed.\n"
         )
         await client.call_tool("publish_sop", {"content": content, "stage": "preprod"})
         await client.call_tool(

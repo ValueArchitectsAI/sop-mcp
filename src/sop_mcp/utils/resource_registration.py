@@ -89,7 +89,7 @@ def _clear_sop_resources(mcp: Any) -> None:
 
 def _register_sop(mcp: Any, backend: Any, sop_name: str, sop: Any) -> None:
     """Register a single SOP and its attachments as MCP resources."""
-    description = sop.description or sop.truncated_overview
+    description = _build_description(sop)
 
     mcp.resource(
         f"{SOP_URI_SCHEME}{sop_name}",
@@ -99,6 +99,26 @@ def _register_sop(mcp: Any, backend: Any, sop_name: str, sop: Any) -> None:
     )(_make_sop_reader(backend, sop_name))
 
     _register_attachments(mcp, backend, sop_name)
+
+
+def _build_description(sop: Any) -> str:
+    """Compose the MCP resource description.
+
+    The agent sees this string when browsing ``resources/list`` and
+    deciding which SOP to read. We serve the Overview summary plus the
+    SOP's ``## Parameters`` block verbatim so the agent knows *what*
+    the SOP does *and* what inputs it takes at selection time.
+
+    The Parameters block passes through unchanged because SOP109 in
+    the sop-lint rule engine enforces a consistent schema on every
+    parameter bullet — no runtime transformation or summarisation is
+    required.
+    """
+    summary = sop.description or sop.truncated_overview
+    params = getattr(sop, "parameters", "") or ""
+    if params:
+        return f"{summary}\n\n## Parameters\n\n{params}"
+    return summary
 
 
 def _register_attachments(mcp: Any, backend: Any, sop_name: str) -> None:

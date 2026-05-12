@@ -1,0 +1,21 @@
+# Pre-commit hook manifest for sop-mcp consumers.
+#
+# To use in another repo, add to its .pre-commit-config.yaml:
+#
+# repos:
+#   - repo: https://github.com/ValueArchitectsAI/sop-mcp
+#     rev: v0.11.0   # pin to a release tag
+#     hooks:
+#       - id: sop-lint
+#
+# The hook runs `sop-lint` against every modified *.sop.md file.
+# Configure rules via a sop-lint.toml at the repo root — the CLI walks
+# upward from each file to discover it (mirrors ruff's behaviour).
+
+- id: sop-lint
+  name: SOP linter
+  description: Lint Agent SOP markdown files using the same rule engine as the sop-mcp server.
+  entry: sop-lint
+  language: python
+  types_or: [markdown]
+  files: \.sop\.md$

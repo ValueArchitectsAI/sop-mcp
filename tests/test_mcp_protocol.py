@@ -7,22 +7,31 @@ that it speaks valid JSON-RPC 2.0 / MCP protocol.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
+import tempfile
 
 PROTOCOL_VERSION = "2024-11-05"
 
 
 def _send_receive(messages: list[dict]) -> list[dict]:
-    """Send JSON-RPC messages to the server via stdin, collect responses from stdout."""
+    """Send JSON-RPC messages to the server via stdin, collect responses from stdout.
+
+    Uses an isolated temp storage dir so stale or user-specific SOPs in
+    ``~/.sop_mcp`` don't leak into the protocol conformance tests.
+    """
     input_lines = "\n".join(json.dumps(m) for m in messages) + "\n"
-    result = subprocess.run(
-        [sys.executable, "-c", "from src.sop_mcp.server import run; run()"],
-        input=input_lines,
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
+    with tempfile.TemporaryDirectory() as tmp:
+        env = {**os.environ, "SOP_STORAGE_DIR": tmp}
+        result = subprocess.run(
+            [sys.executable, "-c", "from src.sop_mcp.server import run; run()"],
+            input=input_lines,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
     responses = []
     for line in result.stdout.strip().splitlines():
         if line.strip():
@@ -258,7 +267,7 @@ class TestMCPResourcesRead:
         contents = r["result"]["contents"]
         assert len(contents) == 1
         assert contents[0]["mimeType"] == "text/markdown"
-        assert "Step 1" in contents[0]["text"]
+        assert "### 1." in contents[0]["text"]
 
 
 class TestMCPPing:

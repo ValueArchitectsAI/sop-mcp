@@ -127,8 +127,14 @@ async def test_shell_hook_fires_on_publish_sop(tmp_path):
         "stage: preprod\n"
         "---\n\n"
         "# Hook Pub Test\n\n"
-        "## Overview\n\nTest.\n\n"
-        "### Step 1: Do\n\nAction. **Time Estimate:** 1 minute\n"
+        "## Overview\n\nHook test fixture.\n\n"
+        "## Parameters\n\n- **x** (required): x.\n\n"
+        "## Steps\n\n"
+        "### 1. Do\n\n"
+        "Action body.\n\n"
+        "**Constraints:**\n"
+        "- You MUST act\n\n"
+        "**Expected Output:** Action completed.\n"
     )
     try:
         async with Client(transport) as client:
@@ -212,8 +218,14 @@ async def test_llm_hook_adds_suggestions_on_publish(tmp_path):
         "stage: preprod\n"
         "---\n\n"
         "# LLM Hook Pub\n\n"
-        "## Overview\n\nTest.\n\n"
-        "### Step 1: Do\n\nAction. **Time Estimate:** 1 minute\n"
+        "## Overview\n\nLLM hook test fixture.\n\n"
+        "## Parameters\n\n- **x** (required): x.\n\n"
+        "## Steps\n\n"
+        "### 1. Do\n\n"
+        "Action body.\n\n"
+        "**Constraints:**\n"
+        "- You MUST act\n\n"
+        "**Expected Output:** Action completed.\n"
     )
     async with Client(transport) as client:
         result = await client.call_tool("publish_sop", {"content": content, "stage": "preprod"})

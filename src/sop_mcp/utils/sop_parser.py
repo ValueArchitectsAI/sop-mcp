@@ -134,6 +134,7 @@ class SOP:
     def _populate(self, parsed: dict[str, Any]) -> None:
         self.title: str = parsed["title"]
         self.overview: str = parsed["overview"]
+        self.parameters: str = parsed["parameters"]
         self.steps: list[str] = parsed["steps"]
         self.version: int = parsed["version"]
         self.description: str = parsed["description"]
@@ -192,6 +193,7 @@ def _parse_content(content: str) -> dict[str, Any]:
         "stage": stage,
         "title": _extract_title(body),
         "overview": _extract_overview(body),
+        "parameters": _extract_parameters(body),
         "steps": _extract_steps(body),
     }
 
@@ -223,11 +225,24 @@ def _extract_overview(content: str) -> str:
     return match.group(1).strip()
 
 
+def _extract_parameters(content: str) -> str:
+    """Return the ``## Parameters`` section text, or empty string when absent.
+
+    Unlike ``_extract_overview`` this does not raise when the section is
+    missing — parameters are optional in the sop-mcp parser view. The
+    sop-lint engine enforces their presence via SOP103, not the parser.
+    """
+    pattern = r"^##\s+Parameters\s*\n(.*?)(?=^##\s|\Z)"
+    match = re.search(pattern, content, re.MULTILINE | re.DOTALL)
+    return match.group(1).strip() if match else ""
+
+
 def _extract_steps(content: str) -> list[str]:
-    pattern = r"^(###\s+Step\s+\d+:\s+.+?)(?=^###\s+Step\s+\d+:|\Z)"
+    # Agent SOP spec: "### N. Step Name" — number, dot, space, name.
+    pattern = r"^(###\s+\d+\.\s+.+?)(?=^###\s+\d+\.\s|\Z)"
     matches = re.findall(pattern, content, re.MULTILINE | re.DOTALL)
     if not matches:
-        raise ValueError("SOP file has no steps (expected ### Step N: format)")
+        raise ValueError("SOP file has no steps (expected `### N. Step Name` format)")
     return [step.strip() for step in matches]
 
 
