@@ -12,7 +12,7 @@ import subprocess
 import sys
 import tempfile
 
-PROTOCOL_VERSION = "2024-11-05"
+PROTOCOL_VERSION = "2025-06-18"
 
 
 def _send_receive(messages: list[dict]) -> list[dict]:
@@ -292,3 +292,73 @@ class TestMCPUnknownMethod:
         r = responses[0]
         assert "error" in r
         assert r["error"]["code"] == -32601
+
+
+class TestMCPPagination:
+    """Pagination conformance for tools/list, resources/list, resources/templates/list.
+
+    Per the spec (https://modelcontextprotocol.io/specification/2025-06-18/server/utilities/pagination):
+    - Cursors are opaque tokens; clients don't parse them
+    - Missing ``nextCursor`` means last page
+    - Invalid cursors SHOULD return -32602 (Invalid params)
+    - Cursor + remaining-list must reconstruct the full set with no duplicates
+    """
+
+    def _list_with_cursor(self, method: str, cursor: str | None = None) -> dict:
+        params = {"cursor": cursor} if cursor is not None else {}
+        responses = _init_and_send(
+            [
+                {"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
+            ]
+        )
+        return responses[0]
+
+    def test_invalid_cursor_rejected_with_invalid_params(self):
+        """Bogus cursors surface as -32602 on every paginated endpoint."""
+        for method in ("tools/list", "resources/list", "resources/templates/list"):
+            r = self._list_with_cursor(method, cursor="not-a-real-cursor")
+            assert "error" in r, f"{method} accepted invalid cursor: {r}"
+            assert r["error"]["code"] == -32602, f"{method} wrong error code: {r['error']}"
+
+    def test_tiny_page_exposes_next_cursor(self, monkeypatch):
+        """Drop the page size to 1 to exercise a real cursor round-trip.
+
+        The page size is read from ``SOP_MCP_PAGE_SIZE`` at request time
+        on the server side. Setting the env var here propagates into the
+        subprocess via ``_send_receive``'s ``{**os.environ, ...}`` copy.
+        """
+        monkeypatch.setenv("SOP_MCP_PAGE_SIZE", "1")
+
+        # Page 1
+        r1 = self._list_with_cursor("resources/list")
+        assert "nextCursor" in r1["result"], "first page should advertise nextCursor"
+        assert len(r1["result"]["resources"]) == 1
+        uris_seen = {r["uri"] for r in r1["result"]["resources"]}
+
+        # Walk subsequent pages
+        cursor = r1["result"]["nextCursor"]
+        pages = 1
+        while cursor is not None and pages < 50:  # safety bound
+            r = self._list_with_cursor("resources/list", cursor=cursor)
+            items = r["result"]["resources"]
+            for item in items:
+                assert item["uri"] not in uris_seen, "duplicate URI across pages"
+                uris_seen.add(item["uri"])
+            cursor = r["result"].get("nextCursor")
+            pages += 1
+
+        # Final page MUST omit nextCursor
+        assert cursor is None, "pagination never terminated"
+        assert len(uris_seen) > 1, "only one page materialised"
+
+    def test_empty_list_has_no_cursor(self):
+        """resources/templates/list is empty — must not emit a cursor."""
+        r = self._list_with_cursor("resources/templates/list")
+        assert "nextCursor" not in r["result"]
+        assert r["result"]["resourceTemplates"] == []
+
+    def test_single_page_has_no_cursor(self):
+        """When the full set fits in one page, no cursor is emitted."""
+        # Default page size is 50; we have 5 resources — fits comfortably.
+        r = self._list_with_cursor("resources/list")
+        assert "nextCursor" not in r["result"]

@@ -289,6 +289,18 @@ class LocalFilesystemBackend:
         """Public helper — return the on-disk path of an SOP by name."""
         return self._sop_path(name)
 
+    def attachment_path_for(self, name: str, relative_path: str) -> Path | None:
+        """Public helper — return the on-disk path of an attachment, or ``None``."""
+        sidecar = self._attachment_dir(name)
+        if sidecar is None:
+            return None
+        candidate = (sidecar / relative_path).resolve()
+        try:
+            candidate.relative_to(sidecar.resolve())
+        except ValueError:
+            return None
+        return candidate if candidate.is_file() else None
+
     # --- Sidecar attachments ---
 
     # Files/directories to never expose as attachments.

@@ -169,3 +169,64 @@ async def test_feedback_not_listed_as_resource(mcp_transport):
         data = json.loads(result.content[0].text)
         uris = [r["uri"] for r in data["resources"]]
         assert not any("feedback.jsonl" in uri for uri in uris), "feedback.jsonl should be hidden"
+
+
+# ---------------------------------------------------------------------------
+# Template resources
+# ---------------------------------------------------------------------------
+
+
+async def test_template_sop_is_listed(mcp_transport):
+    """template://sop appears in resources/list with template-specific metadata."""
+    async with Client(mcp_transport) as client:
+        resources = await client.list_resources()
+        template = next((r for r in resources if str(r.uri) == "template://sop"), None)
+        assert template is not None, "template://sop is not registered"
+        assert template.mimeType == "text/markdown"
+
+
+async def test_template_sop_read_returns_scaffold(mcp_transport):
+    """Reading template://sop returns a markdown SOP scaffold with TODO placeholders."""
+    async with Client(mcp_transport) as client:
+        contents = await client.read_resource("template://sop")
+        assert len(contents) == 1
+        body = contents[0].text
+        # Scaffold markers — the template is deliberately TODO-driven, so
+        # these confirm it's the placeholder template and not a real SOP.
+        assert "TODO" in body
+        assert "## Overview" in body
+        assert "## Parameters" in body
+        assert "## Steps" in body
+
+
+async def test_template_sop_body_lints_clean(mcp_transport):
+    """The template scaffold must pass sop-lint with no errors or warnings.
+
+    Contract: any user who copies template://sop and starts filling in
+    TODOs should get a lint-clean SOP without having to fix structure.
+    If a new lint rule fires on the template, the template needs to
+    evolve alongside it.
+    """
+    import subprocess
+    import sys
+    import tempfile
+    from pathlib import Path
+
+    async with Client(mcp_transport) as client:
+        contents = await client.read_resource("template://sop")
+        body = contents[0].text
+
+    with tempfile.NamedTemporaryFile("w", suffix=".sop.md", delete=False) as f:
+        f.write(body)
+        tmp_path = Path(f.name)
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "src.sop_lint.cli", str(tmp_path)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        assert result.returncode == 0, f"template scaffold failed lint: {result.stdout}{result.stderr}"
+    finally:
+        tmp_path.unlink(missing_ok=True)

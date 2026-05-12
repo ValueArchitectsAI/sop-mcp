@@ -16,8 +16,14 @@ from typing import Any, get_type_hints
 
 logger = logging.getLogger(__name__)
 
-# MCP protocol version
-PROTOCOL_VERSION = "2024-11-05"
+# MCP protocol versions this server is willing to speak.
+# When the client requests one of these during ``initialize``, we echo it
+# back. Otherwise we fall back to ``PROTOCOL_VERSION``. The list is ordered
+# newest-first for human readability; order doesn't affect negotiation.
+SUPPORTED_PROTOCOL_VERSIONS = ("2025-06-18", "2024-11-05")
+
+# Default version advertised when the client doesn't send one we recognise.
+PROTOCOL_VERSION = SUPPORTED_PROTOCOL_VERSIONS[0]
 
 # JSON schema type mapping
 _TYPE_MAP: dict[type, str] = {
@@ -74,6 +80,118 @@ def _build_input_schema(fn: Callable) -> dict[str, Any]:
     return schema
 
 
+def _resource_descriptor(r: _ResourceInfo) -> dict[str, Any]:
+    """Build the wire-format descriptor for a registered resource.
+
+    Optional fields (``title``, ``size``, ``annotations``) are emitted only
+    when populated — the MCP spec treats them as optional, and omitting
+    them keeps the payload small for clients that don't consume them.
+    """
+    descriptor: dict[str, Any] = {
+        "uri": r.uri,
+        "name": r.name,
+        "description": r.description,
+        "mimeType": r.mime_type,
+    }
+    if r.title:
+        descriptor["title"] = r.title
+    if r.size is not None:
+        descriptor["size"] = r.size
+    if r.annotations:
+        descriptor["annotations"] = r.annotations
+    return descriptor
+
+
+# ---------------------------------------------------------------------------
+# Pagination
+# ---------------------------------------------------------------------------
+
+# Default page size for list operations. Clients MUST NOT assume a fixed
+# value — the spec deliberately hides it behind an opaque cursor so we can
+# tune this without a protocol bump. Overridable via ``SOP_MCP_PAGE_SIZE``
+# so tests (and operators) can shrink the page to exercise the cursor
+# round-trip without needing a huge catalog.
+DEFAULT_PAGE_SIZE = 50
+
+
+def _configured_page_size() -> int:
+    """Resolve the effective page size at request time.
+
+    Read the env var fresh on each call so tests that set it after
+    import pick up the override. Bad values fall back silently to the
+    compile-time default; this is a knob, not an input we want to fail
+    the server over.
+    """
+    import os
+
+    raw = os.environ.get("SOP_MCP_PAGE_SIZE")
+    if not raw:
+        return DEFAULT_PAGE_SIZE
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning("Invalid SOP_MCP_PAGE_SIZE=%r; using default %d", raw, DEFAULT_PAGE_SIZE)
+        return DEFAULT_PAGE_SIZE
+    if value < 1:
+        logger.warning("SOP_MCP_PAGE_SIZE must be >= 1; using default %d", DEFAULT_PAGE_SIZE)
+        return DEFAULT_PAGE_SIZE
+    return value
+
+
+def _encode_cursor(offset: int) -> str:
+    """Encode a zero-based offset into an opaque base64url cursor."""
+    import base64
+
+    return base64.urlsafe_b64encode(str(offset).encode("ascii")).decode("ascii").rstrip("=")
+
+
+def _decode_cursor(cursor: str) -> int:
+    """Decode an opaque cursor back to a zero-based offset.
+
+    Raises ``ValueError`` for anything the cursor encoder didn't emit,
+    so the dispatcher can map it to JSON-RPC ``-32602`` per the spec.
+    """
+    import base64
+
+    if not cursor:
+        raise ValueError("Empty cursor")
+    # Restore base64 padding stripped by the encoder.
+    padding = (-len(cursor)) % 4
+    try:
+        raw = base64.urlsafe_b64decode(cursor + ("=" * padding))
+        offset = int(raw.decode("ascii"))
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise ValueError(f"Malformed cursor: {cursor!r}") from exc
+    if offset < 0:
+        raise ValueError(f"Cursor offset cannot be negative: {offset}")
+    return offset
+
+
+def _paginate(
+    items: list[Any],
+    cursor: str | None,
+    page_size: int | None = None,
+) -> tuple[list[Any], str | None]:
+    """Slice ``items`` into a single page starting at the cursor offset.
+
+    Returns ``(page, next_cursor)``. ``next_cursor`` is ``None`` on the
+    last page. The caller is responsible for surfacing a ``ValueError``
+    from ``_decode_cursor`` as ``-32602``.
+    """
+    if page_size is None:
+        page_size = _configured_page_size()
+    offset = _decode_cursor(cursor) if cursor else 0
+    # A cursor pointing at or past the end is only valid when the list
+    # is exactly that length (i.e. we handed it out on the previous page
+    # boundary). Anything beyond is a stale or fabricated cursor.
+    if offset > len(items):
+        raise ValueError(f"Cursor offset {offset} exceeds item count {len(items)}")
+    page = items[offset : offset + page_size]
+    next_offset = offset + len(page)
+    next_cursor = _encode_cursor(next_offset) if next_offset < len(items) else None
+    return page, next_cursor
+
+
 class _ToolInfo:
     """Internal tool registration."""
 
@@ -89,7 +207,17 @@ class _ToolInfo:
 class _ResourceInfo:
     """Internal resource registration."""
 
-    __slots__ = ("description", "fn", "is_binary", "mime_type", "name", "uri")
+    __slots__ = (
+        "annotations",
+        "description",
+        "fn",
+        "is_binary",
+        "mime_type",
+        "name",
+        "size",
+        "title",
+        "uri",
+    )
 
     def __init__(
         self,
@@ -98,14 +226,18 @@ class _ResourceInfo:
         description: str,
         mime_type: str,
         fn: Callable,
-        is_binary: bool = False,
+        meta: dict[str, Any] | None = None,
     ) -> None:
         self.uri = uri
         self.name = name
         self.description = description
         self.mime_type = mime_type
         self.fn = fn
-        self.is_binary = is_binary
+        meta = meta or {}
+        self.is_binary = bool(meta.get("is_binary", False))
+        self.title = meta.get("title")
+        self.size = meta.get("size")
+        self.annotations = meta.get("annotations") or {}
 
 
 class StdioMCP:
@@ -149,11 +281,25 @@ class StdioMCP:
         description: str = "",
         mime_type: str = "text/plain",
         is_binary: bool = False,
+        meta: dict[str, Any] | None = None,
     ) -> Callable:
-        """Register a function as an MCP resource (decorator factory)."""
+        """Register a function as an MCP resource (decorator factory).
+
+        ``meta`` carries MCP-spec optional fields (``title``, ``size``,
+        ``annotations``). Packed into a single dict to keep the signature
+        narrow.
+        """
+        merged = {**(meta or {}), "is_binary": is_binary}
 
         def decorator(fn: Callable) -> Callable:
-            self._resources[uri] = _ResourceInfo(uri, name, description, mime_type, fn, is_binary)
+            self._resources[uri] = _ResourceInfo(
+                uri,
+                name,
+                description,
+                mime_type,
+                fn,
+                meta=merged,
+            )
             return fn
 
         return decorator
@@ -186,7 +332,15 @@ class StdioMCP:
             type(
                 "Resource",
                 (),
-                {"uri": r.uri, "name": r.name, "description": r.description, "mimeType": r.mime_type},
+                {
+                    "uri": r.uri,
+                    "name": r.name,
+                    "title": r.title,
+                    "description": r.description,
+                    "mimeType": r.mime_type,
+                    "size": r.size,
+                    "annotations": r.annotations or None,
+                },
             )()
             for r in self._resources.values()
         ]
@@ -274,6 +428,7 @@ class StdioMCP:
             "tools/list": self._handle_tools_list,
             "tools/call": self._handle_tool_call,
             "resources/list": self._handle_resources_list,
+            "resources/templates/list": self._handle_resource_templates_list,
             "resources/read": self._handle_resource_read,
             "resources/subscribe": self._handle_subscribe,
             "resources/unsubscribe": self._handle_unsubscribe,
@@ -287,8 +442,14 @@ class StdioMCP:
     _handle_request = _dispatch
 
     def _handle_initialize(self, params: dict[str, Any], req_id: Any) -> dict[str, Any]:
+        # Echo the client's requested protocol version when we support it;
+        # otherwise advertise the newest version we speak. The MCP spec
+        # requires client and server to agree on a single version for the
+        # session — clients that can't speak our fallback will disconnect.
+        requested = params.get("protocolVersion") if isinstance(params, dict) else None
+        version = requested if requested in SUPPORTED_PROTOCOL_VERSIONS else PROTOCOL_VERSION
         result: dict[str, Any] = {
-            "protocolVersion": PROTOCOL_VERSION,
+            "protocolVersion": version,
             "capabilities": {
                 "tools": {"listChanged": False},
                 "resources": {"subscribe": True, "listChanged": True},
@@ -306,7 +467,7 @@ class StdioMCP:
         tools = [
             {"name": t.name, "description": t.description, "inputSchema": t.input_schema} for t in self._tools.values()
         ]
-        return self._rpc_result(req_id, {"tools": tools})
+        return self._paginated_result(req_id, params, tools, "tools")
 
     def _handle_tool_call(self, params: dict[str, Any], req_id: Any) -> dict[str, Any]:
         name = params.get("name", "")
@@ -326,16 +487,20 @@ class StdioMCP:
             return self._rpc_result(req_id, {"content": content, "isError": True})
 
     def _handle_resources_list(self, params: dict[str, Any], req_id: Any) -> dict[str, Any]:
-        resources = [
-            {"uri": r.uri, "name": r.name, "description": r.description, "mimeType": r.mime_type}
-            for r in self._resources.values()
-        ]
-        return self._rpc_result(req_id, {"resources": resources})
+        resources = [_resource_descriptor(r) for r in self._resources.values()]
+        return self._paginated_result(req_id, params, resources, "resources")
+
+    def _handle_resource_templates_list(self, params: dict[str, Any], req_id: Any) -> dict[str, Any]:
+        # We don't expose parameterised resources yet, but the spec requires
+        # a conformant handler so compliant clients don't trip on -32601.
+        return self._paginated_result(req_id, params, [], "resourceTemplates")
 
     def _handle_resource_read(self, params: dict[str, Any], req_id: Any) -> dict[str, Any]:
         uri = params.get("uri", "")
         if uri not in self._resources:
-            return self._rpc_error(req_id, -32602, f"Unknown resource: {uri}")
+            # Spec-defined "Resource not found" code — distinct from generic
+            # invalid-params (-32602) so clients can branch on it.
+            return self._rpc_error(req_id, -32002, f"Resource not found: {uri}")
 
         resource = self._resources[uri]
         try:
@@ -370,6 +535,29 @@ class StdioMCP:
     # JSON-RPC helpers
     # ------------------------------------------------------------------
 
+    def _paginated_result(
+        self,
+        req_id: Any,
+        params: dict[str, Any],
+        items: list[Any],
+        list_key: str,
+    ) -> dict[str, Any]:
+        """Build a paginated JSON-RPC result for a list endpoint.
+
+        Reads ``params["cursor"]`` (if present), slices ``items`` via
+        ``_paginate``, and surfaces ``_decode_cursor`` errors as the
+        spec-mandated ``-32602 (Invalid params)``.
+        """
+        cursor = params.get("cursor") if isinstance(params, dict) else None
+        try:
+            page, next_cursor = _paginate(items, cursor)
+        except ValueError as exc:
+            return self._rpc_error(req_id, -32602, f"Invalid cursor: {exc}")
+        result: dict[str, Any] = {list_key: page}
+        if next_cursor is not None:
+            result["nextCursor"] = next_cursor
+        return self._rpc_result(req_id, result)
+
     @staticmethod
     def _rpc_result(req_id: Any, result: Any) -> dict[str, Any]:
         return {"jsonrpc": "2.0", "id": req_id, "result": result}
@@ -394,12 +582,7 @@ class StdioMCP:
         resources = self._resources
 
         def _list() -> dict:
-            return {
-                "resources": [
-                    {"uri": r.uri, "name": r.name, "description": r.description, "mimeType": r.mime_type}
-                    for r in resources.values()
-                ]
-            }
+            return {"resources": [_resource_descriptor(r) for r in resources.values()]}
 
         def _read(uri: str) -> dict:
             if uri not in resources:
