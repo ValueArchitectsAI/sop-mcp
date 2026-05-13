@@ -522,6 +522,48 @@ class TestSOP303KebabCaseFilename:
         assert "SOP303" not in codes(lint(build_sop()))
 
 
+class TestSOP304ReferencesAreLinks:
+    def test_no_references_section_passes(self):
+        assert "SOP304" not in codes(lint(build_sop()))
+
+    def test_valid_link_bullets_pass(self):
+        refs = "## References\n\n- [AWS Docs](https://docs.aws.amazon.com)\n- [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119)\n"
+        assert "SOP304" not in codes(lint(build_sop(extra_sections=refs)))
+
+    def test_plain_text_entry_fires(self):
+        refs = "## References\n\nSome plain text reference.\n"
+        result = lint(build_sop(extra_sections=refs))
+        assert "SOP304" in codes(result)
+        diag = next(d for d in result.diagnostics if d.code == "SOP304")
+        assert diag.severity is Severity.ERROR
+
+    def test_bare_url_bullet_fires(self):
+        refs = "## References\n\n- https://example.com\n"
+        assert "SOP304" in codes(lint(build_sop(extra_sections=refs)))
+
+    def test_non_bullet_link_fires(self):
+        refs = "## References\n\n[Some Link](https://example.com)\n"
+        assert "SOP304" in codes(lint(build_sop(extra_sections=refs)))
+
+    def test_blank_lines_ignored(self):
+        refs = "## References\n\n- [Link One](https://one.example.com)\n\n- [Link Two](https://two.example.com)\n"
+        assert "SOP304" not in codes(lint(build_sop(extra_sections=refs)))
+
+    def test_sub_heading_ignored(self):
+        refs = "## References\n\n### External\n\n- [Link](https://example.com)\n"
+        assert "SOP304" not in codes(lint(build_sop(extra_sections=refs)))
+
+    def test_references_allowed_by_sop301(self):
+        refs = "## References\n\n- [Link](https://example.com)\n"
+        assert "SOP301" not in codes(lint(build_sop(extra_sections=refs)))
+
+    def test_suggestion_provided(self):
+        refs = "## References\n\nbare text\n"
+        result = lint(build_sop(extra_sections=refs))
+        diag = next(d for d in result.diagnostics if d.code == "SOP304")
+        assert diag.suggestion == "- [Description](https://url)"
+
+
 # ---------------------------------------------------------------------------
 # SOPMCP0xx — strict extras (frontmatter)
 # ---------------------------------------------------------------------------
