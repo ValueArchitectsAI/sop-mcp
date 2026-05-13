@@ -113,7 +113,7 @@ _NEGATIVE_CONTEXT_MARKERS = ("because", "since", "due to", "to avoid", " as ")
 # SOPs (e.g. ``agent-sops/code-assist.sop.md``) and are therefore
 # allowed without warning.
 _ALLOWED_TOP_LEVEL_SECTIONS = frozenset(
-    {"Overview", "Parameters", "Steps", "Examples", "Troubleshooting", "Desired Outcome"}
+    {"Overview", "Parameters", "Steps", "Examples", "Troubleshooting", "Desired Outcome", "References"}
 )
 
 # Sections with specific anti-pattern messaging. Each entry pairs a
@@ -893,6 +893,54 @@ class FileNameIsKebabCase:
             )
 
 
+class ReferencesAreLinks:
+    """SOP304 — every entry in ``## References`` must be a Markdown link.
+
+    A ``## References`` section is optional, but when present every
+    non-blank content line must be a bullet whose sole content is a
+    Markdown link: ``- [text](url)``.  Plain text, bare URLs, and
+    non-bullet lines are all rejected so the section stays machine-
+    readable and consistently formatted.
+    """
+
+    code = "SOP304"
+    default_severity = Severity.ERROR
+    # Matches "- [any text](any url)" — the canonical link-bullet form.
+    _link_bullet_re = re.compile(r"^\s*-\s+\[.+\]\(.+\)\s*$")
+
+    def check(self, doc: SopDocument) -> Iterable[Diagnostic]:
+        refs_body = _extract_section(doc.body, "References")
+        if refs_body is None:
+            return  # section absent — nothing to validate
+
+        # Find the 1-based line of the "## References" heading so we can
+        # report accurate line numbers for each offending entry.
+        heading_match = re.search(r"^##\s+References\s*$", doc.body, re.MULTILINE)
+        heading_line = (
+            doc.body[: heading_match.start()].count("\n") + doc.body_line_offset
+            if heading_match
+            else doc.body_line_offset
+        )
+
+        for offset, line_text in enumerate(refs_body.splitlines(), start=1):
+            stripped = line_text.strip()
+            if not stripped:
+                continue  # blank lines are fine
+            if stripped.startswith("#"):
+                continue  # sub-headings are fine
+            if not self._link_bullet_re.match(line_text):
+                yield Diagnostic(
+                    code=self.code,
+                    severity=self.default_severity,
+                    line=heading_line + offset,
+                    message=(
+                        f"References entry is not a Markdown link bullet: {stripped!r}. "
+                        "Every entry must use the form `- [Description](https://url)`."
+                    ),
+                    suggestion="- [Description](https://url)",
+                )
+
+
 # --- SOPMCP0xx: sop-mcp strict extras ---------------------------------------
 
 
@@ -1109,6 +1157,7 @@ BUILTIN_RULES: tuple[Rule, ...] = (
     AllowedTopLevelSections(),
     DisallowedNamedSections(),
     FileNameIsKebabCase(),
+    ReferencesAreLinks(),
     # sop-mcp strict extras (MCP0xx) — opt-in
     _FrontmatterPresent(),
     _FrontmatterRequiredFields(),
