@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.1](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.12.0...v0.12.1) (2026-05-13)
+
+
+### Bug Fixes
+
+* SOP304 — References section must contain only Markdown link bullets ([735ee56](https://github.com/ValueArchitectsAI/sop-mcp/commit/735ee5644d901c19ca1e73112cd77f6a45c5f57c))
+* SOP304 — References section must contain only Markdown link bullets ([#94](https://github.com/ValueArchitectsAI/sop-mcp/issues/94)) ([bf1306c](https://github.com/ValueArchitectsAI/sop-mcp/commit/bf1306cdf82306965c3afd40885bf4206d2aaff3))
+
 ## [0.12.0](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.11.0...v0.12.0) (2026-05-12)
 
 
