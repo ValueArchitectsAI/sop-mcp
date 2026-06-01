@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.2](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.12.1...v0.12.2) (2026-06-01)
+
+
+### Bug Fixes
+
+* switch license from MIT to Apache 2.0 ([c01b9ca](https://github.com/ValueArchitectsAI/sop-mcp/commit/c01b9ca914f92c5a333802e0293af70ede419b5b))
+* switch license from MIT to Apache 2.0 ([#108](https://github.com/ValueArchitectsAI/sop-mcp/issues/108)) ([923eeb2](https://github.com/ValueArchitectsAI/sop-mcp/commit/923eeb2f337f01ad6e22ed3adc1ba3c0ac8f72f4))
+
 ## [0.12.1](https://github.com/ValueArchitectsAI/sop-mcp/compare/v0.12.0...v0.12.1) (2026-05-13)
 
 
